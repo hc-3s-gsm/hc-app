@@ -1,9 +1,42 @@
 import { neon } from "@neondatabase/serverless"
 
-const sql = neon(process.env.DATABASE_URL!)
+let sql: any = null
+
+try {
+  if (process.env.DATABASE_URL) {
+    sql = neon(process.env.DATABASE_URL)
+    console.log("[v0] Database connection initialized")
+  } else {
+    console.log("[v0] DATABASE_URL not found in environment variables")
+  }
+} catch (error) {
+  console.error("[v0] Failed to initialize database connection:", error)
+}
+
+export async function getUserByNik(nik: string) {
+  try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
+    console.log("[v0] Querying database for NIK:", nik)
+    const result = await sql("SELECT * FROM users WHERE nik = $1", [nik])
+    console.log("[v0] Query result:", result)
+    return result[0] || null
+  } catch (error) {
+    console.error("[v0] Error fetching user by NIK:", error)
+    return null
+  }
+}
 
 export async function getUsers() {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM users ORDER BY created_at DESC")
     return result
   } catch (error) {
@@ -14,6 +47,11 @@ export async function getUsers() {
 
 export async function getUserById(id: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM users WHERE id = $1", [id])
     return result[0] || null
   } catch (error) {
@@ -24,6 +62,11 @@ export async function getUserById(id: string) {
 
 export async function getUsersByRole(role: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM users WHERE role = $1 ORDER BY nama", [role])
     return result
   } catch (error) {
@@ -34,6 +77,11 @@ export async function getUsersByRole(role: string) {
 
 export async function getUsersBySite(site: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM users WHERE site = $1 ORDER BY nama", [site])
     return result
   } catch (error) {
@@ -44,15 +92,19 @@ export async function getUsersBySite(site: string) {
 
 export async function addUser(user: any) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql(
-      `INSERT INTO users (id, nik, nama, email, password, role, site, jabatan, departemen, poh, status_karyawan, no_ktp, no_telp, tanggal_bergabung)
+      `INSERT INTO users (nik, nama, email_prefix, password, role, site, jabatan, departemen, poh, status_karyawan, no_ktp, no_telp, tanggal_lahir, jenis_kelamin)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       [
-        user.id,
         user.nik,
         user.nama,
-        user.email,
+        user.emailPrefix,
         user.password,
         user.role,
         user.site,
@@ -62,7 +114,8 @@ export async function addUser(user: any) {
         user.statusKaryawan,
         user.noKtp,
         user.noTelp,
-        user.tanggalBergabung,
+        user.tanggalLahir,
+        user.jenisKelamin,
       ],
     )
     return result[0]
@@ -74,6 +127,11 @@ export async function addUser(user: any) {
 
 export async function updateUser(id: string, updates: any) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const fields = []
     const values = []
     let paramCount = 1
@@ -97,6 +155,11 @@ export async function updateUser(id: string, updates: any) {
 
 export async function deleteUser(id: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     await sql("DELETE FROM users WHERE id = $1", [id])
   } catch (error) {
     console.error("Error deleting user:", error)
@@ -107,6 +170,11 @@ export async function deleteUser(id: string) {
 // Leave Request operations
 export async function getLeaveRequests() {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM leave_requests ORDER BY created_at DESC")
     return result
   } catch (error) {
@@ -117,6 +185,11 @@ export async function getLeaveRequests() {
 
 export async function getLeaveRequestById(id: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM leave_requests WHERE id = $1", [id])
     return result[0] || null
   } catch (error) {
@@ -127,6 +200,11 @@ export async function getLeaveRequestById(id: string) {
 
 export async function getLeaveRequestsByUserId(userId: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM leave_requests WHERE user_id = $1 ORDER BY created_at DESC", [userId])
     return result
   } catch (error) {
@@ -137,6 +215,11 @@ export async function getLeaveRequestsByUserId(userId: string) {
 
 export async function getLeaveRequestsBySite(site: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM leave_requests WHERE site = $1 ORDER BY created_at DESC", [site])
     return result
   } catch (error) {
@@ -147,6 +230,11 @@ export async function getLeaveRequestsBySite(site: string) {
 
 export async function getLeaveRequestsByStatus(status: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM leave_requests WHERE status = $1 ORDER BY created_at DESC", [status])
     return result
   } catch (error) {
@@ -157,6 +245,11 @@ export async function getLeaveRequestsByStatus(status: string) {
 
 export async function getPendingRequestsForAtasan(site: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM leave_requests WHERE status = $1 AND site = $2 ORDER BY created_at DESC", [
       "pending_atasan",
       site,
@@ -170,6 +263,11 @@ export async function getPendingRequestsForAtasan(site: string) {
 
 export async function getPendingRequestsForPJO(site: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM leave_requests WHERE status = $1 AND site = $2 ORDER BY created_at DESC", [
       "pending_pjo",
       site,
@@ -183,6 +281,11 @@ export async function getPendingRequestsForPJO(site: string) {
 
 export async function getPendingRequestsForHRHO() {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM leave_requests WHERE status = $1 ORDER BY created_at DESC", [
       "pending_hr_ho",
     ])
@@ -195,6 +298,11 @@ export async function getPendingRequestsForHRHO() {
 
 export async function getApprovedRequests() {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM leave_requests WHERE status = $1 ORDER BY created_at DESC", ["approved"])
     return result
   } catch (error) {
@@ -205,6 +313,11 @@ export async function getApprovedRequests() {
 
 export async function addLeaveRequest(request: any) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql(
       `INSERT INTO leave_requests (
         id, user_id, user_name, user_nik, site, jabatan, departemen, poh, status_karyawan,
@@ -249,6 +362,11 @@ export async function addLeaveRequest(request: any) {
 
 export async function updateLeaveRequest(id: string, updates: any) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const fields = []
     const values = []
     let paramCount = 1
@@ -272,6 +390,11 @@ export async function updateLeaveRequest(id: string, updates: any) {
 
 export async function deleteLeaveRequest(id: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     await sql("DELETE FROM leave_requests WHERE id = $1", [id])
   } catch (error) {
     console.error("Error deleting leave request:", error)
@@ -279,123 +402,14 @@ export async function deleteLeaveRequest(id: string) {
   }
 }
 
-export async function getLeaveRequestsSubmittedBy(userId: string) {
-  try {
-    const result = await sql("SELECT * FROM leave_requests WHERE submitted_by = $1 ORDER BY created_at DESC", [userId])
-    return result
-  } catch (error) {
-    console.error("Error fetching leave requests submitted by user:", error)
-    return []
-  }
-}
-
-export async function getApprovedRequestsBySubmitter(userId: string) {
-  try {
-    const result = await sql(
-      "SELECT * FROM leave_requests WHERE submitted_by = $1 AND status = $2 ORDER BY created_at DESC",
-      [userId, "approved"],
-    )
-    return result
-  } catch (error) {
-    console.error("Error fetching approved requests by submitter:", error)
-    return []
-  }
-}
-
-export async function getRejectedRequestsBySubmitter(userId: string) {
-  try {
-    const result = await sql(
-      "SELECT * FROM leave_requests WHERE submitted_by = $1 AND status = $2 ORDER BY created_at DESC",
-      [userId, "rejected"],
-    )
-    return result
-  } catch (error) {
-    console.error("Error fetching rejected requests by submitter:", error)
-    return []
-  }
-}
-
-export async function getApprovedRequestsByApprover(approverUserId: string) {
-  try {
-    const result = await sql(
-      `SELECT DISTINCT lr.* FROM leave_requests lr
-       INNER JOIN approval_history ah ON lr.id = ah.request_id
-       WHERE ah.approver_user_id = $1 AND ah.action = $2 AND lr.status = $3
-       ORDER BY lr.created_at DESC`,
-      [approverUserId, "approved", "approved"],
-    )
-    return result
-  } catch (error) {
-    console.error("Error fetching approved requests by approver:", error)
-    return []
-  }
-}
-
-export async function getRejectedRequestsByApprover(approverUserId: string) {
-  try {
-    const result = await sql(
-      `SELECT DISTINCT lr.* FROM leave_requests lr
-       INNER JOIN approval_history ah ON lr.id = ah.request_id
-       WHERE ah.approver_user_id = $1 AND ah.action = $2
-       ORDER BY lr.created_at DESC`,
-      [approverUserId, "rejected"],
-    )
-    return result
-  } catch (error) {
-    console.error("Error fetching rejected requests by approver:", error)
-    return []
-  }
-}
-
-export async function addLeaveRequestWithSubmitter(request: any) {
-  try {
-    const result = await sql(
-      `INSERT INTO leave_requests (
-        id, user_id, user_name, user_nik, site, jabatan, departemen, poh, status_karyawan,
-        no_ktp, no_telp, email, jenis_pengajuan_cuti, tanggal_pengajuan, tanggal_mulai,
-        tanggal_selesai, jumlah_hari, berangkat_dari, tujuan, sisa_cuti_tahunan,
-        tanggal_cuti_periodik_berikutnya, catatan, alasan, status, submitted_by, submitted_by_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
-       RETURNING *`,
-      [
-        request.id,
-        request.userId,
-        request.userName,
-        request.userNik,
-        request.site,
-        request.jabatan,
-        request.departemen,
-        request.poh,
-        request.statusKaryawan,
-        request.noKtp,
-        request.noTelp,
-        request.email,
-        request.jenisPengajuanCuti,
-        request.tanggalPengajuan,
-        request.tanggalMulai,
-        request.tanggalSelesai,
-        request.jumlahHari,
-        request.berangkatDari,
-        request.tujuan,
-        request.sisaCutiTahunan,
-        request.tanggalCutiPeriodikBerikutnya,
-        request.catatan,
-        request.alasan,
-        request.status,
-        request.submittedBy,
-        request.submittedByName,
-      ],
-    )
-    return result[0]
-  } catch (error) {
-    console.error("Error adding leave request with submitter:", error)
-    throw error
-  }
-}
-
 // Approval History operations
 export async function getApprovalHistory() {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM approval_history ORDER BY timestamp DESC")
     return result
   } catch (error) {
@@ -406,6 +420,11 @@ export async function getApprovalHistory() {
 
 export async function getApprovalHistoryByRequestId(requestId: string) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql("SELECT * FROM approval_history WHERE request_id = $1 ORDER BY timestamp DESC", [
       requestId,
     ])
@@ -418,6 +437,11 @@ export async function getApprovalHistoryByRequestId(requestId: string) {
 
 export async function addApprovalHistory(history: any) {
   try {
+    if (!sql) {
+      console.log("[v0] Database not available, returning null")
+      return null
+    }
+
     const result = await sql(
       `INSERT INTO approval_history (id, request_id, approver_user_id, approver_name, approver_role, action, notes)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
