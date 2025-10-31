@@ -1,459 +1,458 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useAuth } from "@/lib/auth-context"
-import { useRouter } from "next/navigation"
-import { DashboardLayout } from "@/components/dashboard-layout"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, UserPlus, Building2, Shield, Upload, Download } from "lucide-react"
-import { Database } from "@/lib/database"
-import type { User } from "@/lib/types"
+import type React from "react"
+import { useState } from "react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { getRoleLabel } from "@/lib/utils"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { NewUserDialog } from "@/components/new-user-dialog"
-import { EditUserDialog } from "@/components/edit-user-dialog"
-import { SITES } from "@/lib/mock-data"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { CSVImportDialog } from "@/components/csv-import-dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { generateId } from "@/lib/utils"
+import type { User, UserRole } from "@/lib/types"
+import { AlertCircle, CheckCircle2, Upload } from "lucide-react"
 
-export default function AdminDashboard() {
-  const { user, isAuthenticated } = useAuth()
-  const router = useRouter()
-  const [users, setUsers] = useState<User[]>([])
-  const [selectedSite, setSelectedSite] = useState<string>("all")
-  const [isNewUserOpen, setIsNewUserOpen] = useState(false)
-  const [isImportOpen, setIsImportOpen] = useState(false)
-  const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [deletingUser, setDeletingUser] = useState<User | null>(null)
+interface CSVImportDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess: () => void
+}
 
-  useEffect(() => {
-    if (!isAuthenticated || !user) {
-      router.push("/login")
+interface ParsedUser {
+  nik: string
+  nama: string
+  emailPrefix: string
+  password: string
+  role: UserRole
+  site: string
+  jabatan: string
+  departemen: string
+  poh: string
+  statusKaryawan: "Kontrak" | "Tetap"
+  noKtp: string
+  noTelp: string
+  tanggalLahir: string
+  jenisKelamin: "Laki-laki" | "Perempuan"
+}
+
+interface ImportResult {
+  success: number
+  failed: number
+  errors: Array<{ row: number; error: string }>
+}
+
+const VALID_ROLES: UserRole[] = ["user", "hr_site", "dic", "pjo_site", "hr_ho", "hr_ticketing", "super_admin"]
+const VALID_STATUSES = ["Kontrak", "Tetap"]
+
+function parseCSVLine(line: string): string[] {
+  const result: string[] = []
+  let current = ""
+  let insideQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+    const nextChar = line[i + 1]
+
+    if (char === '"') {
+      if (insideQuotes && nextChar === '"') {
+        current += '"'
+        i++
+      } else {
+        insideQuotes = !insideQuotes
+      }
+    } else if (char === "," && !insideQuotes) {
+      result.push(current.trim())
+      current = ""
+    } else {
+      current += char
+    }
+  }
+
+  result.push(current.trim())
+  return result
+}
+
+export function CSVImportDialog({ open, onOpenChange, onSuccess }: CSVImportDialogProps) {
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<ParsedUser[]>([])
+  const [errors, setErrors] = useState<string[]>([])
+  const [isImporting, setIsImporting] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [step, setStep] = useState<"upload" | "preview" | "result">("upload")
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0]
+    if (!selectedFile) return
+
+    if (!selectedFile.name.endsWith(".csv")) {
+      setErrors(["File harus berformat CSV"])
       return
     }
 
-    if (user.role !== "super_admin") {
-      router.push("/dashboard")
-      return
+    setFile(selectedFile)
+    setErrors([])
+
+    try {
+      const text = await selectedFile.text()
+      const lines = text.split("\n").filter((line) => line.trim())
+
+      if (lines.length < 2) {
+        setErrors(["File CSV harus memiliki header dan minimal 1 baris data"])
+        return
+      }
+
+      const headers = parseCSVLine(lines[0]).map((h) => h.toLowerCase())
+      const requiredHeaders = [
+        "nik",
+        "nama",
+        "email_prefix",
+        "password",
+        "role",
+        "site",
+        "jabatan",
+        "departemen",
+        "poh",
+        "status_karyawan",
+        "no_ktp",
+        "no_telp",
+        "tanggal_lahir",
+        "jenis_kelamin",
+      ]
+
+      const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h))
+      if (missingHeaders.length > 0) {
+        setErrors([`Header yang hilang: ${missingHeaders.join(", ")}`])
+        return
+      }
+
+      const existingUsersResponse = await fetch("/api/users")
+      const existingUsers = existingUsersResponse.ok ? await existingUsersResponse.json() : []
+
+      const parsedUsers: ParsedUser[] = []
+      const parseErrors: string[] = []
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVLine(lines[i])
+        const row = i + 1
+
+        try {
+          const nikIndex = headers.indexOf("nik")
+          const namaIndex = headers.indexOf("nama")
+          const emailPrefixIndex = headers.indexOf("email_prefix")
+          const passwordIndex = headers.indexOf("password")
+          const roleIndex = headers.indexOf("role")
+          const siteIndex = headers.indexOf("site")
+          const jabatanIndex = headers.indexOf("jabatan")
+          const departemenIndex = headers.indexOf("departemen")
+          const pohIndex = headers.indexOf("poh")
+          const statusKaryawanIndex = headers.indexOf("status_karyawan")
+          const noKtpIndex = headers.indexOf("no_ktp")
+          const noTelpIndex = headers.indexOf("no_telp")
+          const tanggalLahirIndex = headers.indexOf("tanggal_lahir")
+          const jenisKelaminIndex = headers.indexOf("jenis_kelamin")
+
+          let emailPrefixValue = values[emailPrefixIndex] || ""
+          if (emailPrefixValue.includes("@")) {
+            emailPrefixValue = emailPrefixValue.split("@")[0]
+          }
+
+          const user: ParsedUser = {
+            nik: values[nikIndex] || "",
+            nama: values[namaIndex] || "",
+            emailPrefix: emailPrefixValue,
+            password: values[passwordIndex] || "",
+            role: (values[roleIndex] || "") as UserRole,
+            site: values[siteIndex] || "",
+            jabatan: values[jabatanIndex] || "",
+            departemen: values[departemenIndex] || "",
+            poh: values[pohIndex] || "",
+            statusKaryawan: (values[statusKaryawanIndex] || "") as "Kontrak" | "Tetap",
+            noKtp: values[noKtpIndex] || "",
+            noTelp: values[noTelpIndex] || "",
+            tanggalLahir: values[tanggalLahirIndex] || "",
+            jenisKelamin: (values[jenisKelaminIndex] || "") as "Laki-laki" | "Perempuan",
+          }
+
+          // Validation
+          if (!user.nik) throw new Error("NIK tidak boleh kosong")
+          if (!user.nama) throw new Error("Nama tidak boleh kosong")
+          if (!user.emailPrefix) throw new Error("Email prefix tidak boleh kosong")
+          if (!user.password) throw new Error("Password tidak boleh kosong")
+          if (!VALID_ROLES.includes(user.role)) throw new Error(`Role tidak valid: ${user.role}`)
+          if (!user.site) throw new Error("Site tidak boleh kosong")
+          if (!user.jabatan) throw new Error("Jabatan tidak boleh kosong")
+          if (!user.departemen) throw new Error("Departemen tidak boleh kosong")
+          if (!user.poh) throw new Error("POH tidak boleh kosong")
+          if (!VALID_STATUSES.includes(user.statusKaryawan))
+            throw new Error(`Status karyawan tidak valid: ${user.statusKaryawan}`)
+          if (!user.noKtp) throw new Error("No KTP tidak boleh kosong")
+          if (!user.noTelp) throw new Error("No Telp tidak boleh kosong")
+          if (!user.tanggalLahir) throw new Error("Tanggal lahir tidak boleh kosong")
+          if (!user.jenisKelamin) throw new Error("Jenis kelamin tidak boleh kosong")
+          if (!["Laki-laki", "Perempuan"].includes(user.jenisKelamin))
+            throw new Error(`Jenis kelamin tidak valid: ${user.jenisKelamin}`)
+
+          if (existingUsers.some((u: User) => u.nik === user.nik)) {
+            throw new Error(`NIK sudah terdaftar: ${user.nik}`)
+          }
+
+          if (parsedUsers.some((u) => u.nik === user.nik)) {
+            throw new Error(`NIK duplikat dalam file: ${user.nik}`)
+          }
+
+          if (parsedUsers.some((u) => u.emailPrefix === user.emailPrefix)) {
+            throw new Error(`Email prefix duplikat dalam file: ${user.emailPrefix}`)
+          }
+
+          const fullEmail = `${user.emailPrefix}@3s-gsm.com`
+          if (existingUsers.some((u: User) => u.email === fullEmail)) {
+            throw new Error(`Email sudah terdaftar: ${fullEmail}`)
+          }
+
+          parsedUsers.push(user)
+        } catch (error) {
+          parseErrors.push(`Baris ${row}: ${error instanceof Error ? error.message : "Error tidak diketahui"}`)
+        }
+      }
+
+      if (parseErrors.length > 0) {
+        setErrors(parseErrors)
+        return
+      }
+
+      setPreview(parsedUsers)
+      setStep("preview")
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "Gagal membaca file"])
     }
-
-    loadData()
-  }, [user, isAuthenticated, router])
-
-  const loadData = () => {
-    const allUsers = Database.getUsers()
-    setUsers(allUsers.sort((a, b) => a.nama.localeCompare(b.nama)))
   }
 
-  const handleUserCreated = () => {
-    loadData()
-    setIsNewUserOpen(false)
-    setIsImportOpen(false)
-  }
+  const handleImport = async () => {
+    setIsImporting(true)
+    const result: ImportResult = { success: 0, failed: 0, errors: [] }
 
-  const handleDownloadTemplate = () => {
-    const headers = [
-      "nik",
-      "nama",
-      "email_prefix",
-      "password",
-      "role",
-      "site",
-      "jabatan",
-      "departemen",
-      "poh",
-      "status_karyawan",
-      "no_ktp",
-      "no_telp",
-      "tanggal_lahir",
-      "jenis_kelamin",
-    ]
+    try {
+      for (let i = 0; i < preview.length; i++) {
+        try {
+          const user = preview[i]
 
-    const sampleData = [
-      [
-        "HR001",
-        "John Doe",
-        "john.doe",
-        "password123",
-        "user",
-        "Head Office",
-        "Staff",
-        "IT",
-        "POH001",
-        "Tetap",
-        "3201234567890123",
-        "081234567890",
-        "1990-01-15",
-        "Laki-laki",
-      ],
-      [
-        "HR002",
-        "Jane Smith",
-        "jane.smith",
-        "password456",
-        "hr_site",
-        "Head Office",
-        "Manager",
-        "HR",
-        "POH002",
-        "Kontrak",
-        "3201234567890124",
-        "081234567891",
-        "1992-05-20",
-        "Perempuan",
-      ],
-    ]
+          const newUser: User = {
+            id: generateId("user"),
+            nik: user.nik,
+            nama: user.nama,
+            email: `${user.emailPrefix}@3s-gsm.com`,
+            password: user.password,
+            role: user.role,
+            site: user.site,
+            jabatan: user.jabatan,
+            departemen: user.departemen,
+            poh: user.poh,
+            statusKaryawan: user.statusKaryawan,
+            noKtp: user.noKtp,
+            noTelp: user.noTelp,
+            tanggalLahir: user.tanggalLahir,
+            jenisKelamin: user.jenisKelamin,
+            tanggalBergabung: new Date().toISOString().split("T")[0],
+          }
 
-    const csvContent = [headers.join(","), ...sampleData.map((row) => row.join(","))].join("\n")
+          const response = await fetch("/api/users", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(newUser),
+          })
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    link.href = URL.createObjectURL(blob)
-    link.download = "template_import_karyawan.csv"
-    link.click()
-  }
+          if (!response.ok) {
+            const errorData = await response.json()
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+          }
 
-  const handleExportUsers = () => {
-    const headers = [
-      "nik",
-      "nama",
-      "email_prefix",
-      "password",
-      "role",
-      "site",
-      "jabatan",
-      "departemen",
-      "poh",
-      "status_karyawan",
-      "no_ktp",
-      "no_telp",
-      "tanggal_lahir",
-      "jenis_kelamin",
-    ]
+          result.success++
+        } catch (error) {
+          result.failed++
+          result.errors.push({
+            row: i + 2,
+            error: error instanceof Error ? error.message : "Error tidak diketahui",
+          })
+        }
+      }
 
-    const userData = users.map((user) => [
-      user.nik,
-      user.nama,
-      user.email.split("@")[0], // Extract email prefix
-      "********", // Don't export actual passwords
-      user.role,
-      user.site,
-      user.jabatan,
-      user.departemen,
-      user.poh,
-      user.statusKaryawan,
-      user.noKtp,
-      user.noTelp,
-      user.tanggalLahir,
-      user.jenisKelamin,
-    ])
-
-    const csvContent = [headers.join(","), ...userData.map((row) => row.join(","))].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    link.href = URL.createObjectURL(blob)
-    link.download = `export_karyawan_${new Date().toISOString().split("T")[0]}.csv`
-    link.click()
-  }
-
-  const handleUserUpdated = () => {
-    loadData()
-    setEditingUser(null)
-  }
-
-  const handleDeleteUser = () => {
-    if (deletingUser) {
-      Database.deleteUser(deletingUser.id)
-      loadData()
-      setDeletingUser(null)
+      setImportResult(result)
+      setStep("result")
+    } finally {
+      setIsImporting(false)
     }
   }
 
-  const filteredUsers = selectedSite === "all" ? users : users.filter((u) => u.site === selectedSite)
-
-  const stats = {
-    total: users.length,
-    hrSite: users.filter((u) => u.role === "hr_site").length,
-    atasan: users.filter((u) => u.role === "atasan_langsung").length,
-    pjo: users.filter((u) => u.role === "pjo_site").length,
-    hrHo: users.filter((u) => u.role === "hr_ho").length,
-    ticketing: users.filter((u) => u.role === "hr_ticketing").length,
-    admin: users.filter((u) => u.role === "super_admin").length,
+  const handleClose = () => {
+    if (step === "result" && importResult && importResult.success > 0) {
+      onSuccess()
+    }
+    setFile(null)
+    setPreview([])
+    setErrors([])
+    setImportResult(null)
+    setStep("upload")
+    onOpenChange(false)
   }
-
-  if (!user) return null
 
   return (
-    <DashboardLayout title="Dashboard Super Admin">
-      <div className="space-y-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Pengguna</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
-            </CardContent>
-          </Card>
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Import Data Karyawan dari CSV</DialogTitle>
+          <DialogDescription>Upload file CSV untuk menambahkan data karyawan secara massal</DialogDescription>
+        </DialogHeader>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">HR Site</CardTitle>
-              <Users className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.hrSite}</div>
-            </CardContent>
-          </Card>
+        {step === "upload" && (
+          <div className="space-y-4">
+            <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
+              <Upload className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+              <Label htmlFor="csv-file" className="cursor-pointer">
+                <div className="text-lg font-medium text-slate-700 mb-2">Pilih file CSV</div>
+                <div className="text-sm text-slate-500">atau drag and drop file di sini</div>
+              </Label>
+              <Input id="csv-file" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+            </div>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Approvers</CardTitle>
-              <Shield className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.atasan + stats.pjo + stats.hrHo}</div>
-              <p className="text-xs text-muted-foreground">Atasan, PJO, HR HO</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Admin & Ticketing</CardTitle>
-              <Shield className="h-4 w-4 text-purple-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.ticketing + stats.admin}</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* User Management */}
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <div>
-                <CardTitle>Manajemen Pengguna</CardTitle>
-                <CardDescription>Kelola akun pengguna sistem</CardDescription>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-slate-500" />
-                  <select
-                    className="border border-slate-300 rounded-md px-3 py-1.5 text-sm"
-                    value={selectedSite}
-                    onChange={(e) => setSelectedSite(e.target.value)}
-                  >
-                    <option value="all">Semua Site</option>
-                    {SITES.map((site) => (
-                      <option key={site} value={site}>
-                        {site}
-                      </option>
+            {errors.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="font-medium mb-2">Error:</div>
+                  <ul className="list-disc list-inside space-y-1">
+                    {errors.map((error, idx) => (
+                      <li key={idx} className="text-sm">
+                        {error}
+                      </li>
                     ))}
-                  </select>
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="bg-slate-50 p-4 rounded-lg">
+              <h4 className="font-medium text-sm mb-3">Format CSV yang diharapkan:</h4>
+              <div className="text-xs text-slate-600 font-mono overflow-x-auto">
+                <div>
+                  nik,nama,email_prefix,password,role,site,jabatan,departemen,poh,status_karyawan,no_ktp,no_telp,tanggal_lahir,jenis_kelamin
                 </div>
-                <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Template CSV
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleExportUsers}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export Data
-                </Button>
-                <Button variant="outline" onClick={() => setIsImportOpen(true)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Import CSV
-                </Button>
-                <Button onClick={() => setIsNewUserOpen(true)}>
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Tambah Pengguna
-                </Button>
+                <div className="mt-2 text-slate-500">
+                  HR002,Dina Kusuma,dina,pass123,hr_site,Head
+                  Office,GL,HCGA,POH007,Tetap,3201234567890129,081234567896,1990-05-15,Perempuan
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-slate-700 space-y-1">
+                <p className="font-medium">Catatan Penting:</p>
+                <ul className="list-disc list-inside space-y-1 text-slate-600">
+                  <li>
+                    <strong>email_prefix</strong> harus UNIK untuk setiap karyawan (contoh: john.doe, jane.smith)
+                  </li>
+                  <li>
+                    Jika email_prefix berisi email lengkap (contoh: john@3s-gsm.com), sistem akan otomatis ekstrak
+                    prefix-nya
+                  </li>
+                  <li>Semua email akan otomatis ditambahkan domain @3s-gsm.com</li>
+                  <li>NIK harus unik dan tidak boleh duplikat</li>
+                  <li>Role yang valid: user, hr_site, dic, pjo_site, hr_ho, hr_ticketing, super_admin</li>
+                  <li>Status karyawan: Kontrak atau Tetap</li>
+                  <li>Jenis kelamin: Laki-laki atau Perempuan</li>
+                  <li>Format tanggal: YYYY-MM-DD (contoh: 1990-05-15)</li>
+                </ul>
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="all" className="space-y-4">
-              <TabsList>
-                <TabsTrigger value="all">Semua ({filteredUsers.length})</TabsTrigger>
-                <TabsTrigger value="hr_site">
-                  HR Site ({filteredUsers.filter((u) => u.role === "hr_site").length})
-                </TabsTrigger>
-                <TabsTrigger value="approvers">
-                  Approvers (
-                  {
-                    filteredUsers.filter(
-                      (u) => u.role === "atasan_langsung" || u.role === "pjo_site" || u.role === "hr_ho",
-                    ).length
-                  }
-                  )
-                </TabsTrigger>
-                <TabsTrigger value="admin">
-                  Admin ({filteredUsers.filter((u) => u.role === "hr_ticketing" || u.role === "super_admin").length})
-                </TabsTrigger>
-              </TabsList>
+          </div>
+        )}
 
-              <TabsContent value="all">
-                <UserTable
-                  users={filteredUsers}
-                  onEdit={setEditingUser}
-                  onDelete={setDeletingUser}
-                  currentUserId={user.id}
-                />
-              </TabsContent>
+        {step === "preview" && (
+          <div className="space-y-4">
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>
+                File berhasil diparse. Ditemukan {preview.length} data karyawan yang siap diimport.
+              </AlertDescription>
+            </Alert>
 
-              <TabsContent value="hr_site">
-                <UserTable
-                  users={filteredUsers.filter((u) => u.role === "hr_site")}
-                  onEdit={setEditingUser}
-                  onDelete={setDeletingUser}
-                  currentUserId={user.id}
-                />
-              </TabsContent>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="text-left p-2 font-medium">NIK</th>
+                      <th className="text-left p-2 font-medium">Nama</th>
+                      <th className="text-left p-2 font-medium">Email</th>
+                      <th className="text-left p-2 font-medium">Password</th>
+                      <th className="text-left p-2 font-medium">Role</th>
+                      <th className="text-left p-2 font-medium">Site</th>
+                      <th className="text-left p-2 font-medium">Jabatan</th>
+                      <th className="text-left p-2 font-medium">Status</th>
+                      <th className="text-left p-2 font-medium">Tanggal Lahir</th>
+                      <th className="text-left p-2 font-medium">Jenis Kelamin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.map((user, idx) => (
+                      <tr key={idx} className="border-t border-slate-200 hover:bg-slate-50">
+                        <td className="p-2">{user.nik}</td>
+                        <td className="p-2">{user.nama}</td>
+                        <td className="p-2 text-slate-600">{user.emailPrefix}@3s-gsm.com</td>
+                        <td className="p-2 text-slate-600">{"*".repeat(Math.min(user.password.length, 8))}</td>
+                        <td className="p-2">{user.role}</td>
+                        <td className="p-2">{user.site}</td>
+                        <td className="p-2">{user.jabatan}</td>
+                        <td className="p-2">{user.statusKaryawan}</td>
+                        <td className="p-2">{user.tanggalLahir}</td>
+                        <td className="p-2">{user.jenisKelamin}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-              <TabsContent value="approvers">
-                <UserTable
-                  users={filteredUsers.filter(
-                    (u) => u.role === "atasan_langsung" || u.role === "pjo_site" || u.role === "hr_ho",
-                  )}
-                  onEdit={setEditingUser}
-                  onDelete={setDeletingUser}
-                  currentUserId={user.id}
-                />
-              </TabsContent>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setStep("upload")}>
+                Kembali
+              </Button>
+              <Button onClick={handleImport} disabled={isImporting}>
+                {isImporting ? "Mengimport..." : "Import Data"}
+              </Button>
+            </div>
+          </div>
+        )}
 
-              <TabsContent value="admin">
-                <UserTable
-                  users={filteredUsers.filter((u) => u.role === "hr_ticketing" || u.role === "super_admin")}
-                  onEdit={setEditingUser}
-                  onDelete={setDeletingUser}
-                  currentUserId={user.id}
-                />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Dialogs */}
-      <NewUserDialog open={isNewUserOpen} onOpenChange={setIsNewUserOpen} onSuccess={handleUserCreated} />
-      <CSVImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} onSuccess={handleUserCreated} />
-
-      {editingUser && (
-        <EditUserDialog
-          user={editingUser}
-          open={!!editingUser}
-          onOpenChange={(open) => !open && setEditingUser(null)}
-          onSuccess={handleUserUpdated}
-        />
-      )}
-
-      <AlertDialog open={!!deletingUser} onOpenChange={(open) => !open && setDeletingUser(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Hapus Pengguna</AlertDialogTitle>
-            <AlertDialogDescription>
-              Apakah Anda yakin ingin menghapus pengguna <strong>{deletingUser?.nama}</strong>? Tindakan ini tidak dapat
-              dibatalkan.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteUser} className="bg-red-600 hover:bg-red-700">
-              Hapus
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </DashboardLayout>
-  )
-}
-
-interface UserTableProps {
-  users: User[]
-  onEdit: (user: User) => void
-  onDelete: (user: User) => void
-  currentUserId: string
-}
-
-function UserTable({ users, onEdit, onDelete, currentUserId }: UserTableProps) {
-  if (users.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <Users className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-        <p className="text-slate-600">Tidak ada pengguna</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50">
-          <tr>
-            <th className="text-left p-3 font-medium text-slate-700">NIK</th>
-            <th className="text-left p-3 font-medium text-slate-700">Nama</th>
-            <th className="text-left p-3 font-medium text-slate-700">Tanggal Lahir</th>
-            <th className="text-left p-3 font-medium text-slate-700">Jenis Kelamin</th>
-            <th className="text-left p-3 font-medium text-slate-700">Email</th>
-            <th className="text-left p-3 font-medium text-slate-700">Role</th>
-            <th className="text-left p-3 font-medium text-slate-700">Site</th>
-            <th className="text-left p-3 font-medium text-slate-700">Jabatan</th>
-            <th className="text-left p-3 font-medium text-slate-700">Tanggal Keberangkatan</th>
-            <th className="text-right p-3 font-medium text-slate-700">Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user) => (
-            <tr key={user.id} className="border-t border-slate-200 hover:bg-slate-50">
-              <td className="p-3 font-medium">{user.nik}</td>
-              <td className="p-3">{user.nama}</td>
-              <td className="p-3 text-slate-600">
-                {user.tanggalLahir ? new Date(user.tanggalLahir).toLocaleDateString("id-ID") : "-"}
-              </td>
-              <td className="p-3 text-slate-600">{user.jenisKelamin}</td>
-              <td className="p-3 text-slate-600">{user.email}</td>
-              <td className="p-3">
-                <Badge variant="outline">{getRoleLabel(user.role)}</Badge>
-              </td>
-              <td className="p-3 text-slate-600">{user.site}</td>
-              <td className="p-3 text-slate-600">{user.jabatan}</td>
-              <td className="p-3 text-slate-600">
-                {user.tanggalKeberangkatan ? new Date(user.tanggalKeberangkatan).toLocaleDateString("id-ID") : "-"}
-              </td>
-              <td className="p-3 text-right">
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" size="sm" onClick={() => onEdit(user)}>
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onDelete(user)}
-                    disabled={user.id === currentUserId}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    Hapus
-                  </Button>
+        {step === "result" && importResult && (
+          <div className="space-y-4">
+            <Alert variant={importResult.failed === 0 ? "default" : "destructive"}>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>
+                <div className="font-medium mb-2">Hasil Import:</div>
+                <div className="space-y-1 text-sm">
+                  <div>✓ Berhasil: {importResult.success} data</div>
+                  {importResult.failed > 0 && <div>✗ Gagal: {importResult.failed} data</div>}
                 </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+              </AlertDescription>
+            </Alert>
+
+            {importResult.errors.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <h4 className="font-medium text-sm text-red-900 mb-2">Error Detail:</h4>
+                <div className="space-y-1 text-xs text-red-800 max-h-48 overflow-y-auto">
+                  {importResult.errors.map((err, idx) => (
+                    <div key={idx}>
+                      Baris {err.row}: {err.error}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button onClick={handleClose}>{importResult.success > 0 ? "Selesai" : "Tutup"}</Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
