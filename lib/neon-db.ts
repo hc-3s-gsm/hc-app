@@ -21,7 +21,7 @@ export async function getUserByNik(nik: string) {
     }
 
     console.log("[v0] Querying database for NIK:", nik)
-    const result = await sql("SELECT * FROM users WHERE nik = $1", [nik])
+    const result = await sql`SELECT * FROM users WHERE nik = ${nik}`
     console.log("[v0] Query result:", result)
     return result[0] || null
   } catch (error) {
@@ -37,7 +37,7 @@ export async function getUsers() {
       return null
     }
 
-    const result = await sql("SELECT * FROM users ORDER BY created_at DESC")
+    const result = await sql`SELECT * FROM users ORDER BY created_at DESC`
     return result
   } catch (error) {
     console.error("Error fetching users:", error)
@@ -52,7 +52,7 @@ export async function getUserById(id: string) {
       return null
     }
 
-    const result = await sql("SELECT * FROM users WHERE id = $1", [id])
+    const result = await sql`SELECT * FROM users WHERE id = ${id}`
     return result[0] || null
   } catch (error) {
     console.error("Error fetching user:", error)
@@ -67,7 +67,7 @@ export async function getUsersByRole(role: string) {
       return null
     }
 
-    const result = await sql("SELECT * FROM users WHERE role = $1 ORDER BY nama", [role])
+    const result = await sql`SELECT * FROM users WHERE role = ${role} ORDER BY nama`
     return result
   } catch (error) {
     console.error("Error fetching users by role:", error)
@@ -82,7 +82,7 @@ export async function getUsersBySite(site: string) {
       return null
     }
 
-    const result = await sql("SELECT * FROM users WHERE site = $1 ORDER BY nama", [site])
+    const result = await sql`SELECT * FROM users WHERE site = ${site} ORDER BY nama`
     return result
   } catch (error) {
     console.error("Error fetching users by site:", error)
@@ -97,27 +97,11 @@ export async function addUser(user: any) {
       return null
     }
 
-    const result = await sql(
-      `INSERT INTO users (nik, nama, email_prefix, password, role, site, jabatan, departemen, poh, status_karyawan, no_ktp, no_telp, tanggal_lahir, jenis_kelamin)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-       RETURNING *`,
-      [
-        user.nik,
-        user.nama,
-        user.emailPrefix,
-        user.password,
-        user.role,
-        user.site,
-        user.jabatan,
-        user.departemen,
-        user.poh,
-        user.statusKaryawan,
-        user.noKtp,
-        user.noTelp,
-        user.tanggalLahir,
-        user.jenisKelamin,
-      ],
-    )
+    const result = await sql`
+      INSERT INTO users (nik, nama, email_prefix, password, role, site, jabatan, departemen, poh, status_karyawan, no_ktp, no_telp, tanggal_lahir, jenis_kelamin)
+      VALUES (${user.nik}, ${user.nama}, ${user.emailPrefix}, ${user.password}, ${user.role}, ${user.site}, ${user.jabatan}, ${user.departemen}, ${user.poh}, ${user.statusKaryawan}, ${user.noKtp}, ${user.noTelp}, ${user.tanggalLahir}, ${user.jenisKelamin})
+      RETURNING *
+    `
     return result[0]
   } catch (error) {
     console.error("Error adding user:", error)
@@ -134,18 +118,18 @@ export async function updateUser(id: string, updates: any) {
 
     const fields = []
     const values = []
-    let paramCount = 1
+    let paramCount = 0
 
     Object.entries(updates).forEach(([key, value]) => {
       const dbKey = key.replace(/([A-Z])/g, "_$1").toLowerCase()
-      fields.push(`${dbKey} = $${paramCount}`)
+      fields.push(`${dbKey} = $${paramCount + 1}`)
       values.push(value)
       paramCount++
     })
 
     values.push(id)
-    const query = `UPDATE users SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`
-    const result = await sql(query, values)
+    const query = `UPDATE users SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount + 1} RETURNING *`
+    const result = await sql.query(query, values)
     return result[0]
   } catch (error) {
     console.error("Error updating user:", error)
@@ -160,7 +144,7 @@ export async function deleteUser(id: string) {
       return null
     }
 
-    await sql("DELETE FROM users WHERE id = $1", [id])
+    await sql`DELETE FROM users WHERE id = ${id}`
   } catch (error) {
     console.error("Error deleting user:", error)
     throw error
@@ -175,7 +159,7 @@ export async function getLeaveRequests() {
       return null
     }
 
-    const result = await sql("SELECT * FROM leave_requests ORDER BY created_at DESC")
+    const result = await sql`SELECT * FROM leave_requests ORDER BY created_at DESC`
     return result
   } catch (error) {
     console.error("Error fetching leave requests:", error)
@@ -190,7 +174,7 @@ export async function getLeaveRequestById(id: string) {
       return null
     }
 
-    const result = await sql("SELECT * FROM leave_requests WHERE id = $1", [id])
+    const result = await sql`SELECT * FROM leave_requests WHERE id = ${id}`
     return result[0] || null
   } catch (error) {
     console.error("Error fetching leave request:", error)
@@ -205,7 +189,7 @@ export async function getLeaveRequestsByUserId(userId: string) {
       return null
     }
 
-    const result = await sql("SELECT * FROM leave_requests WHERE user_id = $1 ORDER BY created_at DESC", [userId])
+    const result = await sql`SELECT * FROM leave_requests WHERE user_id = ${userId} ORDER BY created_at DESC`
     return result
   } catch (error) {
     console.error("Error fetching leave requests by user:", error)
@@ -220,7 +204,7 @@ export async function getLeaveRequestsBySite(site: string) {
       return null
     }
 
-    const result = await sql("SELECT * FROM leave_requests WHERE site = $1 ORDER BY created_at DESC", [site])
+    const result = await sql`SELECT * FROM leave_requests WHERE site = ${site} ORDER BY created_at DESC`
     return result
   } catch (error) {
     console.error("Error fetching leave requests by site:", error)
@@ -235,7 +219,7 @@ export async function getLeaveRequestsByStatus(status: string) {
       return null
     }
 
-    const result = await sql("SELECT * FROM leave_requests WHERE status = $1 ORDER BY created_at DESC", [status])
+    const result = await sql`SELECT * FROM leave_requests WHERE status = ${status} ORDER BY created_at DESC`
     return result
   } catch (error) {
     console.error("Error fetching leave requests by status:", error)
@@ -250,10 +234,8 @@ export async function getPendingRequestsForAtasan(site: string) {
       return null
     }
 
-    const result = await sql("SELECT * FROM leave_requests WHERE status = $1 AND site = $2 ORDER BY created_at DESC", [
-      "pending_atasan",
-      site,
-    ])
+    const result =
+      await sql`SELECT * FROM leave_requests WHERE status = 'pending_atasan' AND site = ${site} ORDER BY created_at DESC`
     return result
   } catch (error) {
     console.error("Error fetching pending requests for atasan:", error)
@@ -268,10 +250,8 @@ export async function getPendingRequestsForPJO(site: string) {
       return null
     }
 
-    const result = await sql("SELECT * FROM leave_requests WHERE status = $1 AND site = $2 ORDER BY created_at DESC", [
-      "pending_pjo",
-      site,
-    ])
+    const result =
+      await sql`SELECT * FROM leave_requests WHERE status = 'pending_pjo' AND site = ${site} ORDER BY created_at DESC`
     return result
   } catch (error) {
     console.error("Error fetching pending requests for PJO:", error)
@@ -286,9 +266,7 @@ export async function getPendingRequestsForHRHO() {
       return null
     }
 
-    const result = await sql("SELECT * FROM leave_requests WHERE status = $1 ORDER BY created_at DESC", [
-      "pending_hr_ho",
-    ])
+    const result = await sql`SELECT * FROM leave_requests WHERE status = 'pending_hr_ho' ORDER BY created_at DESC`
     return result
   } catch (error) {
     console.error("Error fetching pending requests for HR HO:", error)
@@ -303,7 +281,7 @@ export async function getApprovedRequests() {
       return null
     }
 
-    const result = await sql("SELECT * FROM leave_requests WHERE status = $1 ORDER BY created_at DESC", ["approved"])
+    const result = await sql`SELECT * FROM leave_requests WHERE status = 'approved' ORDER BY created_at DESC`
     return result
   } catch (error) {
     console.error("Error fetching approved requests:", error)
@@ -318,41 +296,23 @@ export async function addLeaveRequest(request: any) {
       return null
     }
 
-    const result = await sql(
-      `INSERT INTO leave_requests (
+    const result = await sql`
+      INSERT INTO leave_requests (
         id, user_id, user_name, user_nik, site, jabatan, departemen, poh, status_karyawan,
         no_ktp, no_telp, email, jenis_pengajuan_cuti, tanggal_pengajuan, tanggal_mulai,
         tanggal_selesai, jumlah_hari, berangkat_dari, tujuan, sisa_cuti_tahunan,
         tanggal_cuti_periodik_berikutnya, catatan, alasan, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
-       RETURNING *`,
-      [
-        request.id,
-        request.userId,
-        request.userName,
-        request.userNik,
-        request.site,
-        request.jabatan,
-        request.departemen,
-        request.poh,
-        request.statusKaryawan,
-        request.noKtp,
-        request.noTelp,
-        request.email,
-        request.jenisPengajuanCuti,
-        request.tanggalPengajuan,
-        request.tanggalMulai,
-        request.tanggalSelesai,
-        request.jumlahHari,
-        request.berangkatDari,
-        request.tujuan,
-        request.sisaCutiTahunan,
-        request.tanggalCutiPeriodikBerikutnya,
-        request.catatan,
-        request.alasan,
-        request.status,
-      ],
-    )
+      ) VALUES (
+        ${request.id}, ${request.userId}, ${request.userName}, ${request.userNik}, ${request.site}, 
+        ${request.jabatan}, ${request.departemen}, ${request.poh}, ${request.statusKaryawan},
+        ${request.noKtp}, ${request.noTelp}, ${request.email}, ${request.jenisPengajuanCuti}, 
+        ${request.tanggalPengajuan}, ${request.tanggalMulai}, ${request.tanggalSelesai}, 
+        ${request.jumlahHari}, ${request.berangkatDari}, ${request.tujuan}, 
+        ${request.sisaCutiTahunan}, ${request.tanggalCutiPeriodikBerikutnya}, 
+        ${request.catatan}, ${request.alasan}, ${request.status}
+      )
+      RETURNING *
+    `
     return result[0]
   } catch (error) {
     console.error("Error adding leave request:", error)
@@ -369,18 +329,18 @@ export async function updateLeaveRequest(id: string, updates: any) {
 
     const fields = []
     const values = []
-    let paramCount = 1
+    let paramCount = 0
 
     Object.entries(updates).forEach(([key, value]) => {
       const dbKey = key.replace(/([A-Z])/g, "_$1").toLowerCase()
-      fields.push(`${dbKey} = $${paramCount}`)
+      fields.push(`${dbKey} = $${paramCount + 1}`)
       values.push(value)
       paramCount++
     })
 
     values.push(id)
-    const query = `UPDATE leave_requests SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`
-    const result = await sql(query, values)
+    const query = `UPDATE leave_requests SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount + 1} RETURNING *`
+    const result = await sql.query(query, values)
     return result[0]
   } catch (error) {
     console.error("Error updating leave request:", error)
@@ -395,7 +355,7 @@ export async function deleteLeaveRequest(id: string) {
       return null
     }
 
-    await sql("DELETE FROM leave_requests WHERE id = $1", [id])
+    await sql`DELETE FROM leave_requests WHERE id = ${id}`
   } catch (error) {
     console.error("Error deleting leave request:", error)
     throw error
@@ -410,7 +370,7 @@ export async function getApprovalHistory() {
       return null
     }
 
-    const result = await sql("SELECT * FROM approval_history ORDER BY timestamp DESC")
+    const result = await sql`SELECT * FROM approval_history ORDER BY timestamp DESC`
     return result
   } catch (error) {
     console.error("Error fetching approval history:", error)
@@ -425,9 +385,7 @@ export async function getApprovalHistoryByRequestId(requestId: string) {
       return null
     }
 
-    const result = await sql("SELECT * FROM approval_history WHERE request_id = $1 ORDER BY timestamp DESC", [
-      requestId,
-    ])
+    const result = await sql`SELECT * FROM approval_history WHERE request_id = ${requestId} ORDER BY timestamp DESC`
     return result
   } catch (error) {
     console.error("Error fetching approval history by request:", error)
@@ -442,20 +400,11 @@ export async function addApprovalHistory(history: any) {
       return null
     }
 
-    const result = await sql(
-      `INSERT INTO approval_history (id, request_id, approver_user_id, approver_name, approver_role, action, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [
-        history.id,
-        history.requestId,
-        history.approverUserId,
-        history.approverName,
-        history.approverRole,
-        history.action,
-        history.notes,
-      ],
-    )
+    const result = await sql`
+      INSERT INTO approval_history (id, request_id, approver_user_id, approver_name, approver_role, action, notes)
+      VALUES (${history.id}, ${history.requestId}, ${history.approverUserId}, ${history.approverName}, ${history.approverRole}, ${history.action}, ${history.notes})
+      RETURNING *
+    `
     return result[0]
   } catch (error) {
     console.error("Error adding approval history:", error)
