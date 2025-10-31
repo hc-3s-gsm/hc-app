@@ -313,6 +313,53 @@ export async function getLeaveRequestsByUserId(userId: number): Promise<LeaveReq
   }))
 }
 
+export async function getLeaveRequestsSubmittedBy(userId: string): Promise<LeaveRequest[]> {
+  const sql = getSql()
+  const userIdNum = parseInt(userId, 10)
+  const result = await sql`SELECT * FROM leave_requests WHERE user_id = ${userIdNum} ORDER BY created_at DESC`
+  return result.map((row: any) => ({
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name,
+    userNik: row.user_nik,
+    userSite: row.user_site,
+    userDepartemen: row.user_departemen,
+    userJabatan: row.user_jabatan,
+    jenisIzin: row.jenis_izin,
+    tanggalMulai: row.tanggal_mulai,
+    tanggalSelesai: row.tanggal_selesai,
+    jumlahHari: row.jumlah_hari,
+    keterangan: row.keterangan,
+    status: row.status,
+    approvalLevel: row.approval_level,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }))
+}
+
+export async function getLeaveRequestsByStatus(status: string): Promise<LeaveRequest[]> {
+  const sql = getSql()
+  const result = await sql`SELECT * FROM leave_requests WHERE status = ${status} ORDER BY created_at DESC`
+  return result.map((row: any) => ({
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name,
+    userNik: row.user_nik,
+    userSite: row.user_site,
+    userDepartemen: row.user_departemen,
+    userJabatan: row.user_jabatan,
+    jenisIzin: row.jenis_izin,
+    tanggalMulai: row.tanggal_mulai,
+    tanggalSelesai: row.tanggal_selesai,
+    jumlahHari: row.jumlah_hari,
+    keterangan: row.keterangan,
+    status: row.status,
+    approvalLevel: row.approval_level,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }))
+}
+
 export async function addLeaveRequest(
   request: Omit<LeaveRequest, "id" | "createdAt" | "updatedAt">
 ): Promise<LeaveRequest> {
