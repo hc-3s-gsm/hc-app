@@ -84,6 +84,31 @@ export const NeonDB = {
     }))
   },
 
+  async getUserById(id: number): Promise<User | null> {
+    const sql = getSql()
+    const result = await sql`SELECT * FROM users WHERE id = ${id} LIMIT 1`
+    if (result.length === 0) return null
+    const row = result[0]
+    return {
+      id: row.id,
+      nik: row.nik,
+      nama: row.nama,
+      email: row.email,
+      password: row.password,
+      role: row.role,
+      site: row.site,
+      jabatan: row.jabatan,
+      departemen: row.departemen,
+      poh: row.poh,
+      statusKaryawan: row.status_karyawan,
+      noKtp: row.no_ktp,
+      noTelp: row.no_telp,
+      tanggalLahir: row.tanggal_lahir,
+      jenisKelamin: row.jenis_kelamin,
+      createdAt: row.created_at,
+    }
+  },
+
   async getUserByEmail(email: string): Promise<User | null> {
     const sql = getSql()
     const result = await sql`SELECT * FROM users WHERE email = ${email} LIMIT 1`
@@ -134,6 +159,29 @@ export const NeonDB = {
     }
   },
 
+  async getUsersByRole(role: string): Promise<User[]> {
+    const sql = getSql()
+    const result = await sql`SELECT * FROM users WHERE role = ${role} ORDER BY created_at DESC`
+    return result.map((row: any) => ({
+      id: row.id,
+      nik: row.nik,
+      nama: row.nama,
+      email: row.email,
+      password: row.password,
+      role: row.role,
+      site: row.site,
+      jabatan: row.jabatan,
+      departemen: row.departemen,
+      poh: row.poh,
+      statusKaryawan: row.status_karyawan,
+      noKtp: row.no_ktp,
+      noTelp: row.no_telp,
+      tanggalLahir: row.tanggal_lahir,
+      jenisKelamin: row.jenis_kelamin,
+      createdAt: row.created_at,
+    }))
+  },
+
   async addUser(user: Omit<User, "id" | "createdAt">): Promise<User> {
     const sql = getSql()
     const result = await sql`
@@ -172,57 +220,23 @@ export const NeonDB = {
   async updateUser(id: number, updates: Partial<User>): Promise<User> {
     const sql = getSql()
     
-    // Build SET clause dynamically
-    const setClauses: string[] = []
-    const values: any[] = []
-    
-    if (updates.nik !== undefined) {
-      setClauses.push(`nik = '${updates.nik}'`)
-    }
-    if (updates.nama !== undefined) {
-      setClauses.push(`nama = '${updates.nama}'`)
-    }
-    if (updates.email !== undefined) {
-      setClauses.push(`email = '${updates.email}'`)
-    }
-    if (updates.password !== undefined) {
-      setClauses.push(`password = '${updates.password}'`)
-    }
-    if (updates.role !== undefined) {
-      setClauses.push(`role = '${updates.role}'`)
-    }
-    if (updates.site !== undefined) {
-      setClauses.push(`site = '${updates.site}'`)
-    }
-    if (updates.jabatan !== undefined) {
-      setClauses.push(`jabatan = '${updates.jabatan}'`)
-    }
-    if (updates.departemen !== undefined) {
-      setClauses.push(`departemen = '${updates.departemen}'`)
-    }
-    if (updates.poh !== undefined) {
-      setClauses.push(`poh = '${updates.poh}'`)
-    }
-    if (updates.statusKaryawan !== undefined) {
-      setClauses.push(`status_karyawan = '${updates.statusKaryawan}'`)
-    }
-    if (updates.noKtp !== undefined) {
-      setClauses.push(`no_ktp = '${updates.noKtp}'`)
-    }
-    if (updates.noTelp !== undefined) {
-      setClauses.push(`no_telp = '${updates.noTelp}'`)
-    }
-    if (updates.tanggalLahir !== undefined) {
-      setClauses.push(`tanggal_lahir = '${updates.tanggalLahir}'`)
-    }
-    if (updates.jenisKelamin !== undefined) {
-      setClauses.push(`jenis_kelamin = '${updates.jenisKelamin}'`)
-    }
-
-    const setClause = setClauses.join(", ")
     const result = await sql`
       UPDATE users 
-      SET ${sql(setClause)}
+      SET 
+        nik = COALESCE(${updates.nik ?? null}, nik),
+        nama = COALESCE(${updates.nama ?? null}, nama),
+        email = COALESCE(${updates.email ?? null}, email),
+        password = COALESCE(${updates.password ?? null}, password),
+        role = COALESCE(${updates.role ?? null}, role),
+        site = COALESCE(${updates.site ?? null}, site),
+        jabatan = COALESCE(${updates.jabatan ?? null}, jabatan),
+        departemen = COALESCE(${updates.departemen ?? null}, departemen),
+        poh = COALESCE(${updates.poh ?? null}, poh),
+        status_karyawan = COALESCE(${updates.statusKaryawan ?? null}, status_karyawan),
+        no_ktp = COALESCE(${updates.noKtp ?? null}, no_ktp),
+        no_telp = COALESCE(${updates.noTelp ?? null}, no_telp),
+        tanggal_lahir = COALESCE(${updates.tanggalLahir ?? null}, tanggal_lahir),
+        jenis_kelamin = COALESCE(${updates.jenisKelamin ?? null}, jenis_kelamin)
       WHERE id = ${id}
       RETURNING *
     `
@@ -276,6 +290,31 @@ export const NeonDB = {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }))
+  },
+
+  async getLeaveRequestById(id: number): Promise<LeaveRequest | null> {
+    const sql = getSql()
+    const result = await sql`SELECT * FROM leave_requests WHERE id = ${id} LIMIT 1`
+    if (result.length === 0) return null
+    const row = result[0]
+    return {
+      id: row.id,
+      userId: row.user_id,
+      userName: row.user_name,
+      userNik: row.user_nik,
+      userSite: row.user_site,
+      userDepartemen: row.user_departemen,
+      userJabatan: row.user_jabatan,
+      jenisIzin: row.jenis_izin,
+      tanggalMulai: row.tanggal_mulai,
+      tanggalSelesai: row.tanggal_selesai,
+      jumlahHari: row.jumlah_hari,
+      keterangan: row.keterangan,
+      status: row.status,
+      approvalLevel: row.approval_level,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
   },
 
   async getLeaveRequestsByUserId(userId: number): Promise<LeaveRequest[]> {
@@ -346,25 +385,13 @@ export const NeonDB = {
   ): Promise<LeaveRequest> {
     const sql = getSql()
     
-    // Build the update query with only the fields that are provided
-    const setClauses: string[] = []
-    
-    if (updates.status !== undefined) {
-      setClauses.push(`status = '${updates.status}'`)
-    }
-    if (updates.approvalLevel !== undefined) {
-      setClauses.push(`approval_level = ${updates.approvalLevel}`)
-    }
-    if (updates.keterangan !== undefined) {
-      setClauses.push(`keterangan = '${updates.keterangan}'`)
-    }
-    
-    setClauses.push(`updated_at = NOW()`)
-    
-    const setClause = setClauses.join(", ")
     const result = await sql`
       UPDATE leave_requests 
-      SET ${sql(setClause)}
+      SET 
+        status = COALESCE(${updates.status ?? null}, status),
+        approval_level = COALESCE(${updates.approvalLevel ?? null}, approval_level),
+        keterangan = COALESCE(${updates.keterangan ?? null}, keterangan),
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
     `
@@ -388,6 +415,11 @@ export const NeonDB = {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
+  },
+
+  async deleteLeaveRequest(id: number): Promise<void> {
+    const sql = getSql()
+    await sql`DELETE FROM leave_requests WHERE id = ${id}`
   },
 
   // Approval operations
@@ -489,9 +521,9 @@ export const NeonDB = {
     const result = await sql`
       UPDATE approvals 
       SET 
-        status = ${updates.status || 'pending'},
-        keterangan = ${updates.keterangan || ''},
-        updated_at = NOW()
+        status = COALESCE(${updates.status ?? null}, status),
+        keterangan = COALESCE(${updates.keterangan ?? null}, keterangan),
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
     `
@@ -511,4 +543,33 @@ export const NeonDB = {
       updatedAt: row.updated_at,
     }
   },
+
+  async deleteApproval(id: number): Promise<void> {
+    const sql = getSql()
+    await sql`DELETE FROM approvals WHERE id = ${id}`
+  },
 }
+
+// Export individual functions for backward compatibility
+export const getUserByNik = NeonDB.getUserByNik
+export const getUserByEmail = NeonDB.getUserByEmail
+export const getUserById = NeonDB.getUserById
+export const getUsers = NeonDB.getUsers
+export const getUsersByRole = NeonDB.getUsersByRole
+export const addUser = NeonDB.addUser
+export const updateUser = NeonDB.updateUser
+export const deleteUser = NeonDB.deleteUser
+
+export const getLeaveRequests = NeonDB.getLeaveRequests
+export const getLeaveRequestById = NeonDB.getLeaveRequestById
+export const getLeaveRequestsByUserId = NeonDB.getLeaveRequestsByUserId
+export const addLeaveRequest = NeonDB.addLeaveRequest
+export const updateLeaveRequest = NeonDB.updateLeaveRequest
+export const deleteLeaveRequest = NeonDB.deleteLeaveRequest
+
+export const getApprovals = NeonDB.getApprovals
+export const getApprovalsByLeaveRequestId = NeonDB.getApprovalsByLeaveRequestId
+export const getApprovalsByApproverId = NeonDB.getApprovalsByApproverId
+export const addApproval = NeonDB.addApproval
+export const updateApproval = NeonDB.updateApproval
+export const deleteApproval = NeonDB.deleteApproval
