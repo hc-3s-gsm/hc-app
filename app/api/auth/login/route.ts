@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
-import { getUserByNik, updateUser } from "@/lib/neon-db-new"
-import { verifyPassword, hashPassword } from "@/lib/password"
+import { getUserByNik } from "@/lib/neon-db-new"
 
 export async function POST(request: Request) {
   try {
@@ -16,29 +15,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "NIK atau password salah" }, { status: 401 })
     }
 
-    const dbPassword = user.password
-
-    // <CHANGE> Cek apakah password sudah di-hash atau masih plain text
-    const isPasswordHashed = dbPassword.startsWith("$2a$") || dbPassword.startsWith("$2b$")
-
-    let isPasswordValid = false
-
-    if (isPasswordHashed) {
-      // Password sudah di-hash, gunakan bcrypt verification
-      isPasswordValid = await verifyPassword(password, dbPassword)
-    } else {
-      // Password masih plain text, bandingkan langsung
-      isPasswordValid = dbPassword === password
-
-      // <CHANGE> Auto-migrate: hash password lama saat login berhasil
-      if (isPasswordValid) {
-        const hashedPassword = await hashPassword(password)
-        await updateUser(user.id, user.nik, user.nama, hashedPassword, user.role)
-        console.log("[v0] Password auto-migrated for user:", user.nik)
-      }
-    }
-
-    if (!isPasswordValid) {
+    // Plain text password comparison
+    if (user.password !== password) {
       return NextResponse.json({ error: "NIK atau password salah" }, { status: 401 })
     }
 
