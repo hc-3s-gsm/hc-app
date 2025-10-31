@@ -220,16 +220,9 @@ export function CSVImportDialog({ open, onOpenChange, onSuccess }: CSVImportDial
     const result: ImportResult = { success: 0, failed: 0, errors: [] }
 
     try {
-      const existingUsers = Database.getUsers()
-
       for (let i = 0; i < preview.length; i++) {
         try {
           const user = preview[i]
-
-          // Double-check for duplicate NIK
-          if (existingUsers.some((u) => u.nik === user.nik)) {
-            throw new Error(`NIK sudah terdaftar`)
-          }
 
           const newUser: User = {
             id: generateId("user"),
@@ -250,8 +243,21 @@ export function CSVImportDialog({ open, onOpenChange, onSuccess }: CSVImportDial
             tanggalBergabung: new Date().toISOString().split("T")[0],
           }
 
+          const response = await fetch("/api/users", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(newUser),
+          })
+
+          if (!response.ok) {
+            const errorData = await response.json()
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+          }
+
+          // Also save to localStorage for preview
           Database.addUser(newUser)
-          existingUsers.push(newUser)
           result.success++
         } catch (error) {
           result.failed++
