@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, UserPlus, Building2, Shield, Upload } from "lucide-react"
+import { Users, UserPlus, Building2, Shield, Upload, Download } from "lucide-react"
 import { Database } from "@/lib/database"
 import type { User } from "@/lib/types"
 import { Button } from "@/components/ui/button"
@@ -60,6 +60,112 @@ export default function AdminDashboard() {
     loadData()
     setIsNewUserOpen(false)
     setIsImportOpen(false)
+  }
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      "nik",
+      "nama",
+      "email_prefix",
+      "password",
+      "role",
+      "site",
+      "jabatan",
+      "departemen",
+      "poh",
+      "status_karyawan",
+      "no_ktp",
+      "no_telp",
+      "tanggal_lahir",
+      "jenis_kelamin",
+    ]
+
+    const sampleData = [
+      [
+        "HR001",
+        "John Doe",
+        "john.doe",
+        "password123",
+        "user",
+        "Head Office",
+        "Staff",
+        "IT",
+        "POH001",
+        "Tetap",
+        "3201234567890123",
+        "081234567890",
+        "1990-01-15",
+        "Laki-laki",
+      ],
+      [
+        "HR002",
+        "Jane Smith",
+        "jane.smith",
+        "password456",
+        "hr_site",
+        "Head Office",
+        "Manager",
+        "HR",
+        "POH002",
+        "Kontrak",
+        "3201234567890124",
+        "081234567891",
+        "1992-05-20",
+        "Perempuan",
+      ],
+    ]
+
+    const csvContent = [headers.join(","), ...sampleData.map((row) => row.join(","))].join("\n")
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(blob)
+    link.download = "template_import_karyawan.csv"
+    link.click()
+  }
+
+  const handleExportUsers = () => {
+    const headers = [
+      "nik",
+      "nama",
+      "email_prefix",
+      "password",
+      "role",
+      "site",
+      "jabatan",
+      "departemen",
+      "poh",
+      "status_karyawan",
+      "no_ktp",
+      "no_telp",
+      "tanggal_lahir",
+      "jenis_kelamin",
+    ]
+
+    const userData = users.map((user) => [
+      user.nik,
+      user.nama,
+      user.email.split("@")[0], // Extract email prefix
+      "********", // Don't export actual passwords
+      user.role,
+      user.site,
+      user.jabatan,
+      user.departemen,
+      user.poh,
+      user.statusKaryawan,
+      user.noKtp,
+      user.noTelp,
+      user.tanggalLahir,
+      user.jenisKelamin,
+    ])
+
+    const csvContent = [headers.join(","), ...userData.map((row) => row.join(","))].join("\n")
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(blob)
+    link.download = `export_karyawan_${new Date().toISOString().split("T")[0]}.csv`
+    link.click()
   }
 
   const handleUserUpdated = () => {
@@ -160,6 +266,14 @@ export default function AdminDashboard() {
                     ))}
                   </select>
                 </div>
+                <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Template CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleExportUsers}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Data
+                </Button>
                 <Button variant="outline" onClick={() => setIsImportOpen(true)}>
                   <Upload className="h-4 w-4 mr-2" />
                   Import CSV
