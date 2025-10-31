@@ -1,8 +1,8 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/neon-db"
+import { NextResponse } from "next/server"
+import { getUserByNik, updateUser } from "@/lib/neon-db-new"
 import { verifyPassword, hashPassword } from "@/lib/password"
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const { nik, password } = await request.json()
 
@@ -10,28 +10,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "NIK dan password harus diisi" }, { status: 400 })
     }
 
-    const users = await sql`SELECT * FROM users WHERE nik = ${nik} LIMIT 1`
+    const user = await getUserByNik(nik)
 
-    if (users.length === 0) {
+    if (!user) {
       return NextResponse.json({ error: "NIK atau password salah" }, { status: 401 })
     }
 
-    const user = users[0]
+    const dbPassword = user.password
+
+    // <CHANGE> Cek apakah password sudah di-hash atau masih plain text
+    const isPasswordHashed = dbPassword.startsWith("$2a$") || dbPassword.startsWith("$2b$")
+
     let isPasswordValid = false
 
-    // Check if password is already hashed (bcrypt hashes start with $2a$ or $2b$)
-    if (user.password.startsWith("$2a$") || user.password.startsWith("$2b$")) {
-      // Password is hashed, use bcrypt verification
-      isPasswordValid = await verifyPassword(password, user.password)
+    if (isPasswordHashed) {
+      // Password sudah di-hash, gunakan bcrypt verification
+      isPasswordValid = await verifyPassword(password, dbPassword)
     } else {
-      // Password is plain text, compare directly
-      isPasswordValid = password === user.password
+      // Password masih plain text, bandingkan langsung
+      isPasswordValid = dbPassword === password
 
-      // Auto-migrate: hash the password for next time
+      // <CHANGE> Auto-migrate: hash password lama saat login berhasil
       if (isPasswordValid) {
         const hashedPassword = await hashPassword(password)
-        await sql`UPDATE users SET password = ${hashedPassword} WHERE id = ${user.id}`
-        console.log(`[v0] Auto-migrated password for user ${user.nik}`)
+        await updateUser(user.id, user.nik, user.nama, hashedPassword, user.role)
+        console.log("[v0] Password auto-migrated for user:", user.nik)
       }
     }
 
@@ -39,7 +42,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "NIK atau password salah" }, { status: 401 })
     }
 
-    // Login berhasil - return user data tanpa password
+    // Login berhasil
     const { password: _, ...userWithoutPassword } = user
 
     return NextResponse.json({
