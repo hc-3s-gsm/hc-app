@@ -1,93 +1,100 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getUsers, getUserById, getUsersByRole, addUser, updateUser } from "@/lib/neon-db-new"
+import { sql } from "@/lib/neon-db"
+import { hashPassword } from "@/lib/password"
 
-export async function GET(request: NextRequest) {
+// GET - Ambil semua users
+export async function GET() {
   try {
-    const searchParams = request.nextUrl.searchParams
-    const type = searchParams.get("type")
-    const id = searchParams.get("id")
-    const role = searchParams.get("role")
-
-    let result
-
-    if (type === "by-id" && id) {
-      result = await getUserById(id)
-    } else if (type === "by-role" && role) {
-      result = await getUsersByRole(role)
-    } else {
-      result = await getUsers()
-    }
-
-    return NextResponse.json(result)
+    const users = await sql`
+      SELECT id, nik, nama, role, created_at, updated_at 
+      FROM users 
+      ORDER BY created_at DESC
+    `
+    return NextResponse.json({ users })
   } catch (error) {
-    console.error("Error fetching users:", error)
-    return NextResponse.json({ error: "Terjadi kesalahan" }, { status: 500 })
+    console.error("[v0] Get users error:", error)
+    return NextResponse.json({ error: "Gagal mengambil data pengguna" }, { status: 500 })
   }
 }
 
+// POST - Tambah user baru dengan auto-hash password
 export async function POST(request: NextRequest) {
   try {
-    const data = await request.json()
+    const { nik, nama, password, role } = await request.json()
 
-    const {
-      nik,
-      nama,
-      email,
-      password,
-      role,
-      site,
-      jabatan,
-      departemen,
-      poh,
-      statusKaryawan,
-      noKtp,
-      noTelp,
-      tanggalLahir,
-      jenisKelamin,
-    } = data
-
-    if (!nik || !nama || !email || !password) {
-      return NextResponse.json({ error: "Data wajib: nik, nama, email, password" }, { status: 400 })
+    if (!nik || !nama || !password || !role) {
+      return NextResponse.json({ error: "Semua field harus diisi" }, { status: 400 })
     }
 
-    const result = await addUser({
-      id: data.id,
-      nik,
-      nama,
-      email_prefix: email.split("@")[0],
-      password,
-      role,
-      site,
-      jabatan,
-      departemen,
-      poh,
-      status_karyawan: statusKaryawan,
-      no_ktp: noKtp,
-      no_telp: noTelp,
-      tanggal_lahir: tanggalLahir,
-      jenis_kelamin: jenisKelamin,
-    })
+    const existingUser = await sql`SELECT id FROM users WHERE nik = ${nik} LIMIT 1`
 
-    return NextResponse.json(result, { status: 201 })
+    if (existingUser.length > 0) {
+      return NextResponse.json({ error: "NIK sudah terdaftar" }, { status: 400 })
+    }
+
+    const hashedPassword = await hashPassword(password)
+
+    const newUser = await sql`
+      INSERT INTO users (nik, nama, password, role)
+      VALUES (${nik}, ${nama}, ${hashedPassword}, ${role})
+      RETURNING id, nik, nama, role, created_at
+    `
+
+    return NextResponse.json({
+      success: true,
+      user: newUser[0],
+    })
   } catch (error) {
-    console.error("Error creating user:", error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Terjadi kesalahan" }, { status: 500 })
+    console.error("[v0] Create user error:", error)
+    return NextResponse.json({ error: "Gagal menambahkan pengguna" }, { status: 500 })
   }
 }
 
+// PUT - Update user dengan auto-hash password jika diubah
 export async function PUT(request: NextRequest) {
   try {
-    const data = await request.json()
-    const { id, ...updates } = data
+    const { id, nik, nama, password, role } = await request.json()
 
     if (!id) {
-      return NextResponse.json({ error: "ID diperlukan" }, { status: 400 })
+      return NextResponse.json({ error: "ID pengguna harus disertakan" }, { status: 400 })
     }
 
-    const result = await updateUser(id, updates)
-    return NextResponse.json(result)
+    if (password) {
+      const hashedPassword = await hashPassword(password)
+      await sql`
+        UPDATE users 
+        SET nik = ${nik}, nama = ${nama}, password = ${hashedPassword}, role = ${role}, updated_at = NOW()
+        WHERE id = ${id}
+      `
+    } else {
+      await sql`
+        UPDATE users 
+        SET nik = ${nik}, nama = ${nama}, role = ${role}, updated_at = NOW()
+        WHERE id = ${id}
+      `
+    }
+
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error updating user:", error)
-    return NextResponse.json({ error: "Terjadi kesalahan" }, { status: 500 })
+    console.error("[v0] Update user error:", error)
+    return NextResponse.json({ error: "Gagal mengupdate pengguna" }, { status: 500 })
+  }
+}
+
+// DELETE - Hapus user
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get("id")
+
+    if (!id) {
+      return NextResponse.json({ error: "ID pengguna harus disertakan" }, { status: 400 })
+    }
+
+    await sql`DELETE FROM users WHERE id = ${id}`
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("[v0] Delete user error:", error)
+    return NextResponse.json({ error: "Gagal menghapus pengguna" }, { status: 500 })
   }
 }
