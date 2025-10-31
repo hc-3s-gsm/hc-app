@@ -16,7 +16,7 @@ function getSql() {
 
 export async function getUsers() {
   try {
-    const result = await getSql()`SELECT * FROM users ORDER BY created_at DESC`
+    const result = await getSql()("SELECT * FROM users ORDER BY created_at DESC")
     return result
   } catch (error) {
     console.error("Error fetching users:", error)
@@ -26,7 +26,7 @@ export async function getUsers() {
 
 export async function getUserById(id: string) {
   try {
-    const result = await getSql()`SELECT * FROM users WHERE id = ${id}`
+    const result = await getSql()("SELECT * FROM users WHERE id = $1", [id])
     return result[0] || null
   } catch (error) {
     console.error("Error fetching user:", error)
@@ -36,7 +36,7 @@ export async function getUserById(id: string) {
 
 export async function getUserByEmail(email: string) {
   try {
-    const result = await getSql()`SELECT * FROM users WHERE email = ${email}`
+    const result = await getSql()("SELECT * FROM users WHERE email = $1", [email])
     return result[0] || null
   } catch (error) {
     console.error("Error fetching user by email:", error)
@@ -46,7 +46,7 @@ export async function getUserByEmail(email: string) {
 
 export async function getUserByNIK(nik: string) {
   try {
-    const result = await getSql()`SELECT * FROM users WHERE nik = ${nik}`
+    const result = await getSql()("SELECT * FROM users WHERE nik = $1", [nik])
     return result[0] || null
   } catch (error) {
     console.error("Error fetching user by NIK:", error)
@@ -56,7 +56,7 @@ export async function getUserByNIK(nik: string) {
 
 export async function getUsersByRole(role: string) {
   try {
-    const result = await getSql()`SELECT * FROM users WHERE role = ${role} ORDER BY name`
+    const result = await getSql()("SELECT * FROM users WHERE role = $1 ORDER BY name", [role])
     return result
   } catch (error) {
     console.error("Error fetching users by role:", error)
@@ -66,11 +66,12 @@ export async function getUsersByRole(role: string) {
 
 export async function addUser(user: any) {
   try {
-    const result = await getSql()`
-      INSERT INTO users (id, email, password, name, role, department, position, created_at, updated_at)
-      VALUES (${user.id}, ${user.email}, ${user.password}, ${user.name}, ${user.role}, ${user.department}, ${user.position}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      RETURNING *
-    `
+    const result = await getSql()(
+      `INSERT INTO users (id, email, password, name, role, department, position, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [user.id, user.email, user.password, user.name, user.role, user.department, user.position],
+    )
     return result[0]
   } catch (error) {
     console.error("Error adding user:", error)
@@ -93,8 +94,8 @@ export async function updateUser(id: string, updates: any) {
 
     values.push(id)
     const query = `UPDATE users SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`
-    const result = await getSql().query(query, values)
-    return result.rows[0]
+    const result = await getSql()(query, values)
+    return result[0]
   } catch (error) {
     console.error("Error updating user:", error)
     throw error
@@ -105,7 +106,7 @@ export async function updateUser(id: string, updates: any) {
 
 export async function getLeaveRequests() {
   try {
-    const result = await getSql()`SELECT * FROM leave_requests ORDER BY created_at DESC`
+    const result = await getSql()("SELECT * FROM leave_requests ORDER BY created_at DESC")
     return result
   } catch (error) {
     console.error("Error fetching leave requests:", error)
@@ -115,7 +116,7 @@ export async function getLeaveRequests() {
 
 export async function getLeaveRequestById(id: string) {
   try {
-    const result = await getSql()`SELECT * FROM leave_requests WHERE id = ${id}`
+    const result = await getSql()("SELECT * FROM leave_requests WHERE id = $1", [id])
     return result[0] || null
   } catch (error) {
     console.error("Error fetching leave request:", error)
@@ -125,7 +126,7 @@ export async function getLeaveRequestById(id: string) {
 
 export async function getLeaveRequestsByUserId(userId: string) {
   try {
-    const result = await getSql()`SELECT * FROM leave_requests WHERE user_id = ${userId} ORDER BY created_at DESC`
+    const result = await getSql()("SELECT * FROM leave_requests WHERE user_id = $1 ORDER BY created_at DESC", [userId])
     return result
   } catch (error) {
     console.error("Error fetching leave requests by user:", error)
@@ -135,7 +136,9 @@ export async function getLeaveRequestsByUserId(userId: string) {
 
 export async function getLeaveRequestsSubmittedBy(userId: string) {
   try {
-    const result = await getSql()`SELECT * FROM leave_requests WHERE submitted_by = ${userId} ORDER BY created_at DESC`
+    const result = await getSql()("SELECT * FROM leave_requests WHERE submitted_by = $1 ORDER BY created_at DESC", [
+      userId,
+    ])
     return result
   } catch (error) {
     console.error("Error fetching leave requests submitted by user:", error)
@@ -145,7 +148,7 @@ export async function getLeaveRequestsSubmittedBy(userId: string) {
 
 export async function getLeaveRequestsByStatus(status: string) {
   try {
-    const result = await getSql()`SELECT * FROM leave_requests WHERE status = ${status} ORDER BY created_at DESC`
+    const result = await getSql()("SELECT * FROM leave_requests WHERE status = $1 ORDER BY created_at DESC", [status])
     return result
   } catch (error) {
     console.error("Error fetching leave requests by status:", error)
@@ -155,12 +158,13 @@ export async function getLeaveRequestsByStatus(status: string) {
 
 export async function getPendingRequestsForApprover(approverRole: string) {
   try {
-    const result = await getSql()`
-      SELECT lr.* FROM leave_requests lr
-      INNER JOIN approvals a ON lr.id = a.leave_request_id
-      WHERE a.approver_role = ${approverRole} AND a.status = 'pending'
-      ORDER BY lr.created_at DESC
-    `
+    const result = await getSql()(
+      `SELECT lr.* FROM leave_requests lr
+       INNER JOIN approvals a ON lr.id = a.leave_request_id
+       WHERE a.approver_role = $1 AND a.status = 'pending'
+       ORDER BY lr.created_at DESC`,
+      [approverRole],
+    )
     return result
   } catch (error) {
     console.error("Error fetching pending requests for approver:", error)
@@ -170,17 +174,24 @@ export async function getPendingRequestsForApprover(approverRole: string) {
 
 export async function addLeaveRequest(request: any) {
   try {
-    const result = await getSql()`
-      INSERT INTO leave_requests (
+    const result = await getSql()(
+      `INSERT INTO leave_requests (
         id, user_id, submitted_by, submitted_by_name, leave_type_id,
         start_date, end_date, reason, status, created_at, updated_at
-      ) VALUES (
-        ${request.id}, ${request.userId}, ${request.submittedBy}, ${request.submittedByName}, 
-        ${request.leaveTypeId}, ${request.startDate}, ${request.endDate}, ${request.reason}, 
-        ${request.status || "pending"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-      )
-      RETURNING *
-    `
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [
+        request.id,
+        request.userId,
+        request.submittedBy,
+        request.submittedByName,
+        request.leaveTypeId,
+        request.startDate,
+        request.endDate,
+        request.reason,
+        request.status || "pending",
+      ],
+    )
     return result[0]
   } catch (error) {
     console.error("Error adding leave request:", error)
@@ -203,8 +214,8 @@ export async function updateLeaveRequest(id: string, updates: any) {
 
     values.push(id)
     const query = `UPDATE leave_requests SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`
-    const result = await getSql().query(query, values)
-    return result.rows[0]
+    const result = await getSql()(query, values)
+    return result[0]
   } catch (error) {
     console.error("Error updating leave request:", error)
     throw error
@@ -215,7 +226,7 @@ export async function updateLeaveRequest(id: string, updates: any) {
 
 export async function getApprovals() {
   try {
-    const result = await getSql()`SELECT * FROM approvals ORDER BY created_at DESC`
+    const result = await getSql()("SELECT * FROM approvals ORDER BY created_at DESC")
     return result
   } catch (error) {
     console.error("Error fetching approvals:", error)
@@ -225,7 +236,9 @@ export async function getApprovals() {
 
 export async function getApprovalsByRequestId(requestId: string) {
   try {
-    const result = await getSql()`SELECT * FROM approvals WHERE leave_request_id = ${requestId} ORDER BY created_at ASC`
+    const result = await getSql()("SELECT * FROM approvals WHERE leave_request_id = $1 ORDER BY created_at ASC", [
+      requestId,
+    ])
     return result
   } catch (error) {
     console.error("Error fetching approvals by request:", error)
@@ -235,7 +248,9 @@ export async function getApprovalsByRequestId(requestId: string) {
 
 export async function getApprovalsByApproverId(approverId: string) {
   try {
-    const result = await getSql()`SELECT * FROM approvals WHERE approver_id = ${approverId} ORDER BY created_at DESC`
+    const result = await getSql()("SELECT * FROM approvals WHERE approver_id = $1 ORDER BY created_at DESC", [
+      approverId,
+    ])
     return result
   } catch (error) {
     console.error("Error fetching approvals by approver:", error)
@@ -245,17 +260,22 @@ export async function getApprovalsByApproverId(approverId: string) {
 
 export async function addApproval(approval: any) {
   try {
-    const result = await getSql()`
-      INSERT INTO approvals (
+    const result = await getSql()(
+      `INSERT INTO approvals (
         id, leave_request_id, approver_id, approver_name, approver_role,
         status, notes, created_at, updated_at
-      ) VALUES (
-        ${approval.id}, ${approval.leaveRequestId}, ${approval.approverId}, ${approval.approverName}, 
-        ${approval.approverRole}, ${approval.status || "pending"}, ${approval.notes}, 
-        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-      )
-      RETURNING *
-    `
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [
+        approval.id,
+        approval.leaveRequestId,
+        approval.approverId,
+        approval.approverName,
+        approval.approverRole,
+        approval.status || "pending",
+        approval.notes,
+      ],
+    )
     return result[0]
   } catch (error) {
     console.error("Error adding approval:", error)
@@ -278,8 +298,8 @@ export async function updateApproval(id: string, updates: any) {
 
     values.push(id)
     const query = `UPDATE approvals SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`
-    const result = await getSql().query(query, values)
-    return result.rows[0]
+    const result = await getSql()(query, values)
+    return result[0]
   } catch (error) {
     console.error("Error updating approval:", error)
     throw error
@@ -290,7 +310,7 @@ export async function updateApproval(id: string, updates: any) {
 
 export async function getLeaveTypes() {
   try {
-    const result = await getSql()`SELECT * FROM leave_types ORDER BY name`
+    const result = await getSql()("SELECT * FROM leave_types ORDER BY name")
     return result
   } catch (error) {
     console.error("Error fetching leave types:", error)
@@ -300,7 +320,7 @@ export async function getLeaveTypes() {
 
 export async function getLeaveTypeById(id: string) {
   try {
-    const result = await getSql()`SELECT * FROM leave_types WHERE id = ${id}`
+    const result = await getSql()("SELECT * FROM leave_types WHERE id = $1", [id])
     return result[0] || null
   } catch (error) {
     console.error("Error fetching leave type:", error)
