@@ -1,328 +1,514 @@
 import { neon } from "@neondatabase/serverless"
 
-let sql: any = null
-
-try {
-  if (process.env.DATABASE_URL) {
-    sql = neon(process.env.DATABASE_URL)
-    console.log("[v0] Database connection initialized")
-  } else {
-    console.log("[v0] DATABASE_URL not found in environment variables")
+const getSql = () => {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is not set")
   }
-} catch (error) {
-  console.error("[v0] Failed to initialize database connection:", error)
+  return neon(process.env.DATABASE_URL)
 }
 
-export async function getUserByNik(nik: string) {
-  try {
-    if (!sql) {
-      console.log("[v0] Database not available, returning null")
-      return null
-    }
-
-    console.log("[v0] Querying database for NIK:", nik)
-    const result = await sql`SELECT * FROM users WHERE nik = ${nik}`
-    console.log("[v0] Query result:", result)
-    return result[0] || null
-  } catch (error) {
-    console.error("[v0] Error fetching user by NIK:", error)
-    return null
-  }
+export interface User {
+  id: number
+  nik: string
+  nama: string
+  email: string
+  password: string
+  role: string
+  site: string
+  jabatan: string
+  departemen: string
+  poh: string
+  statusKaryawan: string
+  noKtp: string
+  noTelp: string
+  tanggalLahir: string
+  jenisKelamin: string
+  createdAt: string
 }
 
-export async function getUsers() {
-  try {
-    if (!sql) return null
+export interface LeaveRequest {
+  id: number
+  userId: number
+  userName: string
+  userNik: string
+  userSite: string
+  userDepartemen: string
+  userJabatan: string
+  jenisIzin: string
+  tanggalMulai: string
+  tanggalSelesai: string
+  jumlahHari: number
+  keterangan: string
+  status: string
+  approvalLevel: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Approval {
+  id: number
+  leaveRequestId: number
+  approverId: number
+  approverName: string
+  approverNik: string
+  approverJabatan: string
+  level: number
+  status: string
+  keterangan: string
+  createdAt: string
+  updatedAt: string
+}
+
+export const NeonDB = {
+  // User operations
+  async getUsers(): Promise<User[]> {
+    const sql = getSql()
     const result = await sql`SELECT * FROM users ORDER BY created_at DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching users:", error)
-    return []
-  }
-}
+    return result.map((row: any) => ({
+      id: row.id,
+      nik: row.nik,
+      nama: row.nama,
+      email: row.email,
+      password: row.password,
+      role: row.role,
+      site: row.site,
+      jabatan: row.jabatan,
+      departemen: row.departemen,
+      poh: row.poh,
+      statusKaryawan: row.status_karyawan,
+      noKtp: row.no_ktp,
+      noTelp: row.no_telp,
+      tanggalLahir: row.tanggal_lahir,
+      jenisKelamin: row.jenis_kelamin,
+      createdAt: row.created_at,
+    }))
+  },
 
-export async function getUserById(id: string) {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM users WHERE id = ${id}`
-    return result[0] || null
-  } catch (error) {
-    console.error("Error fetching user:", error)
-    return null
-  }
-}
+  async getUserByEmail(email: string): Promise<User | null> {
+    const sql = getSql()
+    const result = await sql`SELECT * FROM users WHERE email = ${email} LIMIT 1`
+    if (result.length === 0) return null
+    const row = result[0]
+    return {
+      id: row.id,
+      nik: row.nik,
+      nama: row.nama,
+      email: row.email,
+      password: row.password,
+      role: row.role,
+      site: row.site,
+      jabatan: row.jabatan,
+      departemen: row.departemen,
+      poh: row.poh,
+      statusKaryawan: row.status_karyawan,
+      noKtp: row.no_ktp,
+      noTelp: row.no_telp,
+      tanggalLahir: row.tanggal_lahir,
+      jenisKelamin: row.jenis_kelamin,
+      createdAt: row.created_at,
+    }
+  },
 
-export async function getUsersByRole(role: string) {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM users WHERE role = ${role} ORDER BY nama`
-    return result
-  } catch (error) {
-    console.error("Error fetching users by role:", error)
-    return []
-  }
-}
+  async getUserByNik(nik: string): Promise<User | null> {
+    const sql = getSql()
+    const result = await sql`SELECT * FROM users WHERE nik = ${nik} LIMIT 1`
+    if (result.length === 0) return null
+    const row = result[0]
+    return {
+      id: row.id,
+      nik: row.nik,
+      nama: row.nama,
+      email: row.email,
+      password: row.password,
+      role: row.role,
+      site: row.site,
+      jabatan: row.jabatan,
+      departemen: row.departemen,
+      poh: row.poh,
+      statusKaryawan: row.status_karyawan,
+      noKtp: row.no_ktp,
+      noTelp: row.no_telp,
+      tanggalLahir: row.tanggal_lahir,
+      jenisKelamin: row.jenis_kelamin,
+      createdAt: row.created_at,
+    }
+  },
 
-export async function getUsersBySite(site: string) {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM users WHERE site = ${site} ORDER BY nama`
-    return result
-  } catch (error) {
-    console.error("Error fetching users by site:", error)
-    return []
-  }
-}
-
-export async function addUser(user: any) {
-  try {
-    if (!sql) return null
-
+  async addUser(user: Omit<User, "id" | "createdAt">): Promise<User> {
+    const sql = getSql()
     const result = await sql`
-      INSERT INTO users (nik, nama, email_prefix, password, role, site, jabatan, departemen, poh, status_karyawan, no_ktp, no_telp, tanggal_lahir, jenis_kelamin)
-      VALUES (${user.nik}, ${user.nama}, ${user.emailPrefix}, ${user.password}, ${user.role}, ${user.site}, ${user.jabatan}, ${user.departemen}, ${user.poh}, ${user.statusKaryawan}, ${user.noKtp}, ${user.noTelp}, ${user.tanggalLahir}, ${user.jenisKelamin})
-      RETURNING *
-    `
-    return result[0]
-  } catch (error) {
-    console.error("Error adding user:", error)
-    throw error
-  }
-}
-
-export async function updateUser(id: string, updates: any) {
-  try {
-    if (!sql) return null
-
-    const fields = []
-    const values = []
-    let paramCount = 0
-
-    Object.entries(updates).forEach(([key, value]) => {
-      const dbKey = key.replace(/([A-Z])/g, "_$1").toLowerCase()
-      fields.push(`${dbKey} = $${paramCount + 1}`)
-      values.push(value)
-      paramCount++
-    })
-
-    values.push(id)
-    const query = `UPDATE users SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount + 1} RETURNING *`
-    const result = await sql.query(query, values)
-    return result[0]
-  } catch (error) {
-    console.error("Error updating user:", error)
-    throw error
-  }
-}
-
-export async function deleteUser(id: string) {
-  try {
-    if (!sql) return null
-    await sql`DELETE FROM users WHERE id = ${id}`
-  } catch (error) {
-    console.error("Error deleting user:", error)
-    throw error
-  }
-}
-
-// Leave Request operations
-export async function getLeaveRequests() {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM leave_requests ORDER BY created_at DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching leave requests:", error)
-    return []
-  }
-}
-
-export async function getLeaveRequestById(id: string) {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM leave_requests WHERE id = ${id}`
-    return result[0] || null
-  } catch (error) {
-    console.error("Error fetching leave request:", error)
-    return null
-  }
-}
-
-export async function getLeaveRequestsByUserId(userId: string) {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM leave_requests WHERE user_id = ${userId} ORDER BY created_at DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching leave requests by user:", error)
-    return []
-  }
-}
-
-export async function getLeaveRequestsBySite(site: string) {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM leave_requests WHERE site = ${site} ORDER BY created_at DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching leave requests by site:", error)
-    return []
-  }
-}
-
-export async function getLeaveRequestsByStatus(status: string) {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM leave_requests WHERE status = ${status} ORDER BY created_at DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching leave requests by status:", error)
-    return []
-  }
-}
-
-export async function getPendingRequestsForAtasan(site: string) {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM leave_requests WHERE status = 'pending_atasan' AND site = ${site} ORDER BY created_at DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching pending requests for atasan:", error)
-    return []
-  }
-}
-
-export async function getPendingRequestsForPJO(site: string) {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM leave_requests WHERE status = 'pending_pjo' AND site = ${site} ORDER BY created_at DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching pending requests for PJO:", error)
-    return []
-  }
-}
-
-export async function getPendingRequestsForHRHO() {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM leave_requests WHERE status = 'pending_hr_ho' ORDER BY created_at DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching pending requests for HR HO:", error)
-    return []
-  }
-}
-
-export async function getApprovedRequests() {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM leave_requests WHERE status = 'approved' ORDER BY created_at DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching approved requests:", error)
-    return []
-  }
-}
-
-export async function addLeaveRequest(request: any) {
-  try {
-    if (!sql) return null
-
-    const result = await sql`
-      INSERT INTO leave_requests (
-        id, user_id, user_name, user_nik, site, jabatan, departemen, poh, status_karyawan,
-        no_ktp, no_telp, email, jenis_pengajuan_cuti, tanggal_pengajuan, tanggal_mulai,
-        tanggal_selesai, jumlah_hari, berangkat_dari, tujuan, sisa_cuti_tahunan,
-        tanggal_cuti_periodik_berikutnya, catatan, alasan, status
+      INSERT INTO users (
+        nik, nama, email, password, role, site, jabatan, departemen, poh,
+        status_karyawan, no_ktp, no_telp, tanggal_lahir, jenis_kelamin
       ) VALUES (
-        ${request.id}, ${request.userId}, ${request.userName}, ${request.userNik}, ${request.site}, 
-        ${request.jabatan}, ${request.departemen}, ${request.poh}, ${request.statusKaryawan},
-        ${request.noKtp}, ${request.noTelp}, ${request.email}, ${request.jenisPengajuanCuti}, 
-        ${request.tanggalPengajuan}, ${request.tanggalMulai}, ${request.tanggalSelesai}, 
-        ${request.jumlahHari}, ${request.berangkatDari}, ${request.tujuan}, 
-        ${request.sisaCutiTahunan}, ${request.tanggalCutiPeriodikBerikutnya}, 
-        ${request.catatan}, ${request.alasan}, ${request.status}
+        ${user.nik}, ${user.nama}, ${user.email}, ${user.password}, ${user.role},
+        ${user.site}, ${user.jabatan}, ${user.departemen}, ${user.poh},
+        ${user.statusKaryawan}, ${user.noKtp}, ${user.noTelp}, ${user.tanggalLahir},
+        ${user.jenisKelamin}
       )
       RETURNING *
     `
-    return result[0]
-  } catch (error) {
-    console.error("Error adding leave request:", error)
-    throw error
-  }
-}
+    const row = result[0]
+    return {
+      id: row.id,
+      nik: row.nik,
+      nama: row.nama,
+      email: row.email,
+      password: row.password,
+      role: row.role,
+      site: row.site,
+      jabatan: row.jabatan,
+      departemen: row.departemen,
+      poh: row.poh,
+      statusKaryawan: row.status_karyawan,
+      noKtp: row.no_ktp,
+      noTelp: row.no_telp,
+      tanggalLahir: row.tanggal_lahir,
+      jenisKelamin: row.jenis_kelamin,
+      createdAt: row.created_at,
+    }
+  },
 
-export async function updateLeaveRequest(id: string, updates: any) {
-  try {
-    if (!sql) return null
+  async updateUser(id: number, updates: Partial<User>): Promise<User> {
+    const sql = getSql()
+    
+    // Build SET clause dynamically
+    const setClauses: string[] = []
+    const values: any[] = []
+    
+    if (updates.nik !== undefined) {
+      setClauses.push(`nik = '${updates.nik}'`)
+    }
+    if (updates.nama !== undefined) {
+      setClauses.push(`nama = '${updates.nama}'`)
+    }
+    if (updates.email !== undefined) {
+      setClauses.push(`email = '${updates.email}'`)
+    }
+    if (updates.password !== undefined) {
+      setClauses.push(`password = '${updates.password}'`)
+    }
+    if (updates.role !== undefined) {
+      setClauses.push(`role = '${updates.role}'`)
+    }
+    if (updates.site !== undefined) {
+      setClauses.push(`site = '${updates.site}'`)
+    }
+    if (updates.jabatan !== undefined) {
+      setClauses.push(`jabatan = '${updates.jabatan}'`)
+    }
+    if (updates.departemen !== undefined) {
+      setClauses.push(`departemen = '${updates.departemen}'`)
+    }
+    if (updates.poh !== undefined) {
+      setClauses.push(`poh = '${updates.poh}'`)
+    }
+    if (updates.statusKaryawan !== undefined) {
+      setClauses.push(`status_karyawan = '${updates.statusKaryawan}'`)
+    }
+    if (updates.noKtp !== undefined) {
+      setClauses.push(`no_ktp = '${updates.noKtp}'`)
+    }
+    if (updates.noTelp !== undefined) {
+      setClauses.push(`no_telp = '${updates.noTelp}'`)
+    }
+    if (updates.tanggalLahir !== undefined) {
+      setClauses.push(`tanggal_lahir = '${updates.tanggalLahir}'`)
+    }
+    if (updates.jenisKelamin !== undefined) {
+      setClauses.push(`jenis_kelamin = '${updates.jenisKelamin}'`)
+    }
 
-    const fields = []
-    const values = []
-    let paramCount = 0
-
-    Object.entries(updates).forEach(([key, value]) => {
-      const dbKey = key.replace(/([A-Z])/g, "_$1").toLowerCase()
-      fields.push(`${dbKey} = $${paramCount + 1}`)
-      values.push(value)
-      paramCount++
-    })
-
-    values.push(id)
-    const query = `UPDATE leave_requests SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount + 1} RETURNING *`
-    const result = await sql.query(query, values)
-    return result[0]
-  } catch (error) {
-    console.error("Error updating leave request:", error)
-    throw error
-  }
-}
-
-export async function deleteLeaveRequest(id: string) {
-  try {
-    if (!sql) return null
-    await sql`DELETE FROM leave_requests WHERE id = ${id}`
-  } catch (error) {
-    console.error("Error deleting leave request:", error)
-    throw error
-  }
-}
-
-// Approval History operations
-export async function getApprovalHistory() {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM approval_history ORDER BY timestamp DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching approval history:", error)
-    return []
-  }
-}
-
-export async function getApprovalHistoryByRequestId(requestId: string) {
-  try {
-    if (!sql) return null
-    const result = await sql`SELECT * FROM approval_history WHERE request_id = ${requestId} ORDER BY timestamp DESC`
-    return result
-  } catch (error) {
-    console.error("Error fetching approval history by request:", error)
-    return []
-  }
-}
-
-export async function addApprovalHistory(history: any) {
-  try {
-    if (!sql) return null
-
+    const setClause = setClauses.join(", ")
     const result = await sql`
-      INSERT INTO approval_history (id, request_id, approver_user_id, approver_name, approver_role, action, notes)
-      VALUES (${history.id}, ${history.requestId}, ${history.approverUserId}, ${history.approverName}, ${history.approverRole}, ${history.action}, ${history.notes})
+      UPDATE users 
+      SET ${sql(setClause)}
+      WHERE id = ${id}
       RETURNING *
     `
-    return result[0]
-  } catch (error) {
-    console.error("Error adding approval history:", error)
-    throw error
-  }
+    
+    const row = result[0]
+    return {
+      id: row.id,
+      nik: row.nik,
+      nama: row.nama,
+      email: row.email,
+      password: row.password,
+      role: row.role,
+      site: row.site,
+      jabatan: row.jabatan,
+      departemen: row.departemen,
+      poh: row.poh,
+      statusKaryawan: row.status_karyawan,
+      noKtp: row.no_ktp,
+      noTelp: row.no_telp,
+      tanggalLahir: row.tanggal_lahir,
+      jenisKelamin: row.jenis_kelamin,
+      createdAt: row.created_at,
+    }
+  },
+
+  async deleteUser(id: number): Promise<void> {
+    const sql = getSql()
+    await sql`DELETE FROM users WHERE id = ${id}`
+  },
+
+  // Leave Request operations
+  async getLeaveRequests(): Promise<LeaveRequest[]> {
+    const sql = getSql()
+    const result =
+      await sql`SELECT * FROM leave_requests ORDER BY created_at DESC`
+    return result.map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      userName: row.user_name,
+      userNik: row.user_nik,
+      userSite: row.user_site,
+      userDepartemen: row.user_departemen,
+      userJabatan: row.user_jabatan,
+      jenisIzin: row.jenis_izin,
+      tanggalMulai: row.tanggal_mulai,
+      tanggalSelesai: row.tanggal_selesai,
+      jumlahHari: row.jumlah_hari,
+      keterangan: row.keterangan,
+      status: row.status,
+      approvalLevel: row.approval_level,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+  },
+
+  async getLeaveRequestsByUserId(userId: number): Promise<LeaveRequest[]> {
+    const sql = getSql()
+    const result =
+      await sql`SELECT * FROM leave_requests WHERE user_id = ${userId} ORDER BY created_at DESC`
+    return result.map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      userName: row.user_name,
+      userNik: row.user_nik,
+      userSite: row.user_site,
+      userDepartemen: row.user_departemen,
+      userJabatan: row.user_jabatan,
+      jenisIzin: row.jenis_izin,
+      tanggalMulai: row.tanggal_mulai,
+      tanggalSelesai: row.tanggal_selesai,
+      jumlahHari: row.jumlah_hari,
+      keterangan: row.keterangan,
+      status: row.status,
+      approvalLevel: row.approval_level,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+  },
+
+  async addLeaveRequest(
+    request: Omit<LeaveRequest, "id" | "createdAt" | "updatedAt">
+  ): Promise<LeaveRequest> {
+    const sql = getSql()
+    const result = await sql`
+      INSERT INTO leave_requests (
+        user_id, user_name, user_nik, user_site, user_departemen, user_jabatan,
+        jenis_izin, tanggal_mulai, tanggal_selesai, jumlah_hari, keterangan,
+        status, approval_level
+      ) VALUES (
+        ${request.userId}, ${request.userName}, ${request.userNik}, ${request.userSite},
+        ${request.userDepartemen}, ${request.userJabatan}, ${request.jenisIzin},
+        ${request.tanggalMulai}, ${request.tanggalSelesai}, ${request.jumlahHari},
+        ${request.keterangan}, ${request.status}, ${request.approvalLevel}
+      )
+      RETURNING *
+    `
+    const row = result[0]
+    return {
+      id: row.id,
+      userId: row.user_id,
+      userName: row.user_name,
+      userNik: row.user_nik,
+      userSite: row.user_site,
+      userDepartemen: row.user_departemen,
+      userJabatan: row.user_jabatan,
+      jenisIzin: row.jenis_izin,
+      tanggalMulai: row.tanggal_mulai,
+      tanggalSelesai: row.tanggal_selesai,
+      jumlahHari: row.jumlah_hari,
+      keterangan: row.keterangan,
+      status: row.status,
+      approvalLevel: row.approval_level,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  },
+
+  async updateLeaveRequest(
+    id: number,
+    updates: Partial<LeaveRequest>
+  ): Promise<LeaveRequest> {
+    const sql = getSql()
+    
+    // Build the update query with only the fields that are provided
+    const setClauses: string[] = []
+    
+    if (updates.status !== undefined) {
+      setClauses.push(`status = '${updates.status}'`)
+    }
+    if (updates.approvalLevel !== undefined) {
+      setClauses.push(`approval_level = ${updates.approvalLevel}`)
+    }
+    if (updates.keterangan !== undefined) {
+      setClauses.push(`keterangan = '${updates.keterangan}'`)
+    }
+    
+    setClauses.push(`updated_at = NOW()`)
+    
+    const setClause = setClauses.join(", ")
+    const result = await sql`
+      UPDATE leave_requests 
+      SET ${sql(setClause)}
+      WHERE id = ${id}
+      RETURNING *
+    `
+    
+    const row = result[0]
+    return {
+      id: row.id,
+      userId: row.user_id,
+      userName: row.user_name,
+      userNik: row.user_nik,
+      userSite: row.user_site,
+      userDepartemen: row.user_departemen,
+      userJabatan: row.user_jabatan,
+      jenisIzin: row.jenis_izin,
+      tanggalMulai: row.tanggal_mulai,
+      tanggalSelesai: row.tanggal_selesai,
+      jumlahHari: row.jumlah_hari,
+      keterangan: row.keterangan,
+      status: row.status,
+      approvalLevel: row.approval_level,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  },
+
+  // Approval operations
+  async getApprovals(): Promise<Approval[]> {
+    const sql = getSql()
+    const result = await sql`SELECT * FROM approvals ORDER BY created_at DESC`
+    return result.map((row: any) => ({
+      id: row.id,
+      leaveRequestId: row.leave_request_id,
+      approverId: row.approver_id,
+      approverName: row.approver_name,
+      approverNik: row.approver_nik,
+      approverJabatan: row.approver_jabatan,
+      level: row.level,
+      status: row.status,
+      keterangan: row.keterangan,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+  },
+
+  async getApprovalsByLeaveRequestId(
+    leaveRequestId: number
+  ): Promise<Approval[]> {
+    const sql = getSql()
+    const result =
+      await sql`SELECT * FROM approvals WHERE leave_request_id = ${leaveRequestId} ORDER BY level ASC`
+    return result.map((row: any) => ({
+      id: row.id,
+      leaveRequestId: row.leave_request_id,
+      approverId: row.approver_id,
+      approverName: row.approver_name,
+      approverNik: row.approver_nik,
+      approverJabatan: row.approver_jabatan,
+      level: row.level,
+      status: row.status,
+      keterangan: row.keterangan,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+  },
+
+  async getApprovalsByApproverId(approverId: number): Promise<Approval[]> {
+    const sql = getSql()
+    const result =
+      await sql`SELECT * FROM approvals WHERE approver_id = ${approverId} ORDER BY created_at DESC`
+    return result.map((row: any) => ({
+      id: row.id,
+      leaveRequestId: row.leave_request_id,
+      approverId: row.approver_id,
+      approverName: row.approver_name,
+      approverNik: row.approver_nik,
+      approverJabatan: row.approver_jabatan,
+      level: row.level,
+      status: row.status,
+      keterangan: row.keterangan,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+  },
+
+  async addApproval(
+    approval: Omit<Approval, "id" | "createdAt" | "updatedAt">
+  ): Promise<Approval> {
+    const sql = getSql()
+    const result = await sql`
+      INSERT INTO approvals (
+        leave_request_id, approver_id, approver_name, approver_nik,
+        approver_jabatan, level, status, keterangan
+      ) VALUES (
+        ${approval.leaveRequestId}, ${approval.approverId}, ${approval.approverName},
+        ${approval.approverNik}, ${approval.approverJabatan}, ${approval.level},
+        ${approval.status}, ${approval.keterangan}
+      )
+      RETURNING *
+    `
+    const row = result[0]
+    return {
+      id: row.id,
+      leaveRequestId: row.leave_request_id,
+      approverId: row.approver_id,
+      approverName: row.approver_name,
+      approverNik: row.approver_nik,
+      approverJabatan: row.approver_jabatan,
+      level: row.level,
+      status: row.status,
+      keterangan: row.keterangan,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  },
+
+  async updateApproval(
+    id: number,
+    updates: Partial<Approval>
+  ): Promise<Approval> {
+    const sql = getSql()
+    
+    const result = await sql`
+      UPDATE approvals 
+      SET 
+        status = ${updates.status || 'pending'},
+        keterangan = ${updates.keterangan || ''},
+        updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING *
+    `
+    
+    const row = result[0]
+    return {
+      id: row.id,
+      leaveRequestId: row.leave_request_id,
+      approverId: row.approver_id,
+      approverName: row.approver_name,
+      approverNik: row.approver_nik,
+      approverJabatan: row.approver_jabatan,
+      level: row.level,
+      status: row.status,
+      keterangan: row.keterangan,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  },
 }
