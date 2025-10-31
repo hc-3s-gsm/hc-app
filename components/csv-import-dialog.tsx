@@ -148,17 +148,16 @@ export function CSVImportDialog({ open, onOpenChange, onSuccess }: CSVImportDial
           const tanggalLahirIndex = headers.indexOf("tanggal_lahir")
           const jenisKelaminIndex = headers.indexOf("jenis_kelamin")
 
-          console.log(`[v0] Row ${row} values:`, {
-            nik: values[nikIndex],
-            password: values[passwordIndex],
-            totalValues: values.length,
-            totalHeaders: headers.length,
-          })
+          let emailPrefixValue = values[emailPrefixIndex] || ""
+          if (emailPrefixValue.includes("@")) {
+            // If it's a full email, extract just the prefix
+            emailPrefixValue = emailPrefixValue.split("@")[0]
+          }
 
           const user: ParsedUser = {
             nik: values[nikIndex] || "",
             nama: values[namaIndex] || "",
-            emailPrefix: values[emailPrefixIndex] || "",
+            emailPrefix: emailPrefixValue,
             password: values[passwordIndex] || "",
             role: (values[roleIndex] || "") as UserRole,
             site: values[siteIndex] || "",
@@ -195,6 +194,10 @@ export function CSVImportDialog({ open, onOpenChange, onSuccess }: CSVImportDial
           const existingUsers = Database.getUsers()
           if (existingUsers.some((u) => u.nik === user.nik)) {
             throw new Error(`NIK sudah terdaftar: ${user.nik}`)
+          }
+
+          if (parsedUsers.some((u) => u.nik === user.nik)) {
+            throw new Error(`NIK duplikat dalam file: ${user.nik}`)
           }
 
           parsedUsers.push(user)
